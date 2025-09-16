@@ -1,0 +1,124 @@
+  <!DOCTYPE html>
+  <html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Inscrição - Campeonato de Fantasias</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f5f7fa;
+      color: #2c3e50;
+      min-height: 100vh;
+    }
+
+    header {
+      background-color: white;
+      color: #2c3e50;
+      padding: 40px 20px;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    }
+
+    form {
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 30px;
+      background-color: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+      margin-bottom: 30px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #34495e;
+    }
+
+    input[type="text"],
+    textarea,
+    input[type="file"] {
+      width: 100%;
+      padding: 12px 14px;
+      margin-bottom: 20px;
+      border-radius: 6px;
+      border: 1px solid #dce1e7;
+      background-color: #fdfefe;
+      box-sizing: border-box;
+      transition: border-color 0.3s;
+      font-size: 1rem;
+    }
+
+    input[type="text"]:focus,
+    textarea:focus,
+    input[type="file"]:focus {
+      border-color: #a0c4ff;
+      outline: none;
+    }
+
+    textarea {
+      resize: vertical;
+    }
+
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background-color 0.3s, transform 0.2s;
+      box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    button:hover {
+      background-color: #43a047;
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+
+  </head>
+  <body>
+
+  <script>
+    {% if isAlert == "sucesso" %}
+      alert("fantasia inscrita com sucesso!")
+    {% elif isAlert == "falha" %}
+      alert("fantasia não inscrita.")
+    {% endif %}
+  </script>
+
+  <header>
+    <h1>🎭 Inscrição - Campeonato de Fantasias</h1>
+    <p>📍 Instituto Federal Goiano - Rio Verde - GO</p>
+    <p>🗓️ 30 de agosto 2025</p>
+  </header>
+
+  <form action="/fantasia-form" method="post" enctype="multipart/form-data">
+    <label for="nome">Nome do Participante</label>
+    <input type="text" id="nome" name="nome" required>
+
+    <label for="nomeFantasia">Nome da Fantasia</label>
+    <input type="text" id="nomeFantasia" name="nomeFantasia" required>
+
+    <label for="descricao">Descrição da Fantasia</label>
+    <textarea id="descricao" name="descricao" rows="5"></textarea>
+
+    <label for="foto">Foto da Fantasia</label>
+    <input type="file" id="foto" name="foto" accept="image/*" required>
+
+    <button type="submit">Enviar Inscrição</button>
+  </form>
+
+</body>
+</html>
+

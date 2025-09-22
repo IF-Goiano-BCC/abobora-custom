@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Votação - Fantasias</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #ffffff;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background-color: #ff8c00;
+            color: white;
+            padding: 15px 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            margin: 0;
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+        .slide-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slide {
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background-color: #fff;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transition: transform 0.3s ease-in-out;
+        }
+
+        .slide.active {
+            display: flex;
+        }
+
+        .slide h2 {
+            font-size: 2rem;
+            color: #ff8c00;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .slide .descricao {
+            max-width: 90%;
+            margin: 0 auto 20px auto;
+            font-size: 1.1rem;
+            line-height: 1.5;
+            text-align: center;
+            color: #555;
+        }
+
+        .slide img {
+            max-width: 85%;
+            max-height: 50%;
+            border-radius: 16px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            margin-bottom: 20px;
+            object-fit: cover;
+        }
+
+        .navigation {
+            position: absolute;
+            bottom: 25%;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            z-index: 50;
+        }
+
+        .nav-button {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: #ff8c00;
+            color: white;
+            border: none;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(255,140,0,0.3);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-button:hover {
+            background-color: #e07b00;
+            transform: scale(1.1);
+        }
+
+        .nav-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .slide-indicator {
+            background-color: rgba(255,140,0,0.2);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #ff8c00;
+            font-weight: bold;
+        }
+
+        .vote-section {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(255,255,255,0.98), rgba(255,255,255,0.95));
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+            z-index: 100;
+        }
+
+        .vote-button {
+            width: 100%;
+            padding: 18px;
+            font-size: 1.3rem;
+            background: linear-gradient(45deg, #ff8c00, #ffa500);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(255,140,0,0.3);
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+
+        .vote-button:hover {
+            background: linear-gradient(45deg, #e07b00, #ff8c00);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(255,140,0,0.4);
+        }
+
+        .vote-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .comparison-info {
+            text-align: center;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .stats {
+            position: fixed;
+            top: 80px;
+            right: 15px;
+            background: rgba(255,255,255,0.95);
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            color: #ff8c00;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            z-index: 90;
+        }
+
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading.show {
+            display: flex;
+        }
+
+        .loading h3 {
+            color: #ff8c00;
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+        }
+
+        .loading p {
+            color: #666;
+            text-align: center;
+            max-width: 80%;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #ff8c00;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px 0;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Gestos touch para mobile */
+        .slide-container {
+            touch-action: pan-y;
+        }
+
+        .slide {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Animações de transição */
+        .slide.slide-left {
+            transform: translateX(-100%);
+        }
+
+        .slide.slide-right {
+            transform: translateX(100%);
+        }
+
+        .slide.slide-in-left {
+            transform: translateX(100%);
+            animation: slideInLeft 0.3s ease-out forwards;
+        }
+
+        .slide.slide-in-right {
+            transform: translateX(-100%);
+            animation: slideInRight 0.3s ease-out forwards;
+        }
+
+        @keyframes slideInLeft {
+            to { transform: translateX(0); }
+        }
+
+        @keyframes slideInRight {
+            to { transform: translateX(0); }
+        }
+
+        /* Tela de fim da votação */
+        .voting-finished {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #ffffff;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            color: #333;
+        }
+
+        .voting-finished.show {
+            display: flex;
+        }
+
+        .finished-content {
+            text-align: center;
+            max-width: 90%;
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        .celebration {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            animation: bounce 1s ease-in-out infinite alternate;
+        }
+
+        .voting-finished h2 {
+            font-size: 2.2rem;
+            margin-bottom: 15px;
+            color: #ff8c00;
+            text-shadow: none;
+        }
+
+        .voting-finished p {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            color: #666;
+        }
+
+        .final-stats {
+            background: #fff;
+            border: 2px solid #ff8c00;
+            border-radius: 20px;
+            padding: 25px;
+            margin: 30px 0;
+            display: flex;
+            justify-content: space-around;
+            box-shadow: 0 8px 32px rgba(255,140,0,0.1);
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #ff8c00;
+            text-shadow: none;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .home-button {
+            background: #ff8c00;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(255,140,0,0.2);
+            transition: all 0.3s ease;
+        }
+
+        .home-button:hover {
+            background: #e07b00;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(255,140,0,0.3);
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes bounce {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Votação - Fantasias</h1>
+            <div class="subtitle">Deslize para comparar e vote na sua favorita</div>
+        </div>
+
+        <div class="stats" id="stats">
+            Votos: <span id="voteCount">0</span>
+        </div>
+
+        <div class="slide-container">
+            <!-- Slide 1 -->
+            <div class="slide active" id="slide-0">
+                <h2 id="name1">Carregando...</h2>
+                <p class="descricao" id="desc1">Aguarde...</p>
+                <img id="img1" src="" alt="">
+            </div>
+
+            <!-- Slide 2 -->
+            <div class="slide" id="slide-1">
+                <h2 id="name2">Carregando...</h2>
+                <p class="descricao" id="desc2">Aguarde...</p>
+                <img id="img2" src="" alt="">
+            </div>
+        </div>
+
+        <div class="navigation">
+            <button class="nav-button" onclick="prevSlide()" id="prevBtn">‹</button>
+            <div class="slide-indicator">
+                <span id="currentSlide">1</span> de 2
+            </div>
+            <button class="nav-button" onclick="nextSlide()" id="nextBtn">›</button>
+        </div>
+
+        <div class="vote-section">
+            <button class="vote-button" onclick="voteForCurrent()" id="voteBtn">
+                Votar nesta fantasia
+            </button>
+            <div class="comparison-info">
+                Compare as duas fantasias deslizando e vote na sua favorita
+            </div>
+        </div>
+    </div>
+
+    <div class="loading" id="loading">
+        <h3>Preparando próxima batalha...</h3>
+        <div class="spinner"></div>
+        <p>Carregando novas fantasias para você escolher!</p>
+    </div>
+
+    <!-- Tela de fim da votação -->
+    <div class="voting-finished" id="votingFinished">
+        <div class="finished-content">
+            <div class="celebration">🎉</div>
+            <h2>Votação Finalizada!</h2>
+            <p>Parabéns! Você votou em todas as fantasias disponíveis.</p>
+            <div class="final-stats">
+                <div class="stat-item">
+                    <span class="stat-number" id="finalVoteCount">0</span>
+                    <span class="stat-label">Votos Realizados</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" id="totalFantasias">0</span>
+                    <span class="stat-label">Total de Fantasias</span>
+                </div>
+            </div>
+            <button class="home-button" onclick="goToHome()">
+                Voltar ao Início
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Lista de fantasias - será carregada da API
+        let fantasias = [];
+
+        let currentPair = [];
+        let currentSlide = 0;
+        let usedFantasias = [];
+        let hasNavigated = false;
+
+        function getRandomFantasias() {
+            const available = fantasias.filter(f => {
+                const id = f._id;
+                return !usedFantasias.includes(id);
+            });
+            console.log(`Fantasias disponíveis: ${available.length}, Processadas: ${usedFantasias.length}, Total: ${fantasias.length}`);
+            
+            if (available.length < 2) {
+                // Não há pares suficientes - votação acabou!
+                return null;
+            }
+
+            const shuffled = [...available].sort(() => Math.random() - 0.5);
+            return shuffled.slice(0, 2);
+        }
+
+        function loadNewPair() {
+            // Verificar se as fantasias foram carregadas
+            if (fantasias.length === 0) {
+                console.log('Fantasias ainda não foram carregadas');
+                return;
+            }
+            
+            const pair = getRandomFantasias();
+            
+            // Verificar se ainda existem pares disponíveis
+            if (!pair) {
+                showVotingFinished();
+                return;
+            }
+            
+            currentPair = pair;
+            currentSlide = 0;
+            hasNavigated = false;
+
+            // Atualizar elementos da tela
+            document.getElementById('name1').textContent = pair[0].nome_fantasia || 'Participante';
+            document.getElementById('desc1').textContent = pair[0].descricao || 'Fantasia criativa';
+            document.getElementById('img1').src = pair[0].url_foto 
+            document.getElementById('img1').alt = pair[0].fome_fantasia || 'Fantasia';
+
+            document.getElementById('name2').textContent = pair[1].nome_fantasia || 'Participante';
+            document.getElementById('desc2').textContent = pair[1].descricao || 'Fantasia criativa';
+            document.getElementById('img2').src = pair[1].url_foto 
+            document.getElementById('img2').alt = pair[1].nome_fantasia || 'Fantasia';
+
+            // Esconder loading e mostrar interface
+            hideLoading();
+            
+            // Reset da navegação
+            showSlide(0);
+            updateVoteButton();
+        }
+
+        function showSlide(index) {
+            const slides = document.querySelectorAll('.slide');
+            slides.forEach(slide => slide.classList.remove('active'));
+            
+            slides[index].classList.add('active');
+            document.getElementById('currentSlide').textContent = index + 1;
+            
+            // Atualizar botões de navegação
+            document.getElementById('prevBtn').disabled = index === 0;
+            document.getElementById('nextBtn').disabled = index === 1;
+            
+            currentSlide = index;
+            updateVoteButton();
+        }
+
+        function nextSlide() {
+            if (currentSlide < 1) {
+                hasNavigated = true;
+                showSlide(currentSlide + 1);
+            }
+        }
+
+        function prevSlide() {
+            if (currentSlide > 0) {
+                hasNavigated = true;
+                showSlide(currentSlide - 1);
+            }
+        }
+
+        function updateVoteButton() {
+            const voteBtn = document.getElementById('voteBtn');
+            const currentFantasia = currentPair[currentSlide];
+            
+            if (currentFantasia) {
+                const nome = currentFantasia.Nome_fantasia || currentFantasia.nome || 'Participante';
+                voteBtn.textContent = `Votar em "${nome}"`;
+                voteBtn.disabled = false;
+            }
+        }
+
+        function voteForCurrent() {
+            const selectedFantasia = currentPair[currentSlide];
+            
+            // Remover AMBAS as fantasias do par atual da lista de disponíveis
+            const id1 = currentPair[0]._id;
+            const id2 = currentPair[1]._id;
+            
+            // Adicionar ambas à lista de usadas (par processado)
+            usedFantasias.push(id1);
+            usedFantasias.push(id2);
+            
+            // Atualizar contador na interface (número de pares processados)
+            const paresProcessados = Math.floor(usedFantasias.length / 2);
+            document.getElementById('voteCount').textContent = paresProcessados;
+
+            // Mostrar loading
+            document.getElementById('loading').classList.add('show');
+
+            // Log do voto
+            const nome = selectedFantasia.Nome_fantasia || selectedFantasia.nome || 'Participante';
+            const selectedId = selectedFantasia._id;
+            console.log(`Par processado. Fantasias restantes: ${fantasias.length - usedFantasias.length}`);
+
+            fetch(`/votar/${selectedId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Voto registrado:', data);
+            })
+            .catch(error => {
+                console.error('Erro ao registrar voto:', error);
+            });
+
+            // Carregar novo par após delay
+            setTimeout(() => {
+                loadNewPair();
+                document.getElementById('loading').classList.remove('show');
+            }, 2000);
+        }
+
+        // Support para gestos touch (swipe)
+        let startX = 0;
+        let startY = 0;
+
+        document.addEventListener('touchstart', e => {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        });
+
+        document.addEventListener('touchend', e => {
+            if (!startX || !startY) return;
+            
+            const endX = e.changedTouches[0].clientX;
+            const endY = e.changedTouches[0].clientY;
+            
+            const diffX = startX - endX;
+            const diffY = startY - endY;
+            
+            // Só processa swipe horizontal se for maior que vertical
+            if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
+                if (diffX > 0) {
+                    // Swipe left - próximo slide
+                    nextSlide();
+                } else {
+                    // Swipe right - slide anterior
+                    prevSlide();
+                }
+            }
+            
+            startX = 0;
+            startY = 0;
+        });
+
+        function showVotingFinished() {
+            const totalProcessadas = usedFantasias.length;
+            const totalFantasias = fantasias.length;
+            const totalVotos = Math.floor(totalProcessadas / 2); // Cada par = 1 voto
+            
+            document.getElementById('finalVoteCount').textContent = totalVotos;
+            document.getElementById('totalFantasias').textContent = totalFantasias;
+            document.getElementById('votingFinished').classList.add('show');
+        }
+
+        function goToHome() {
+            // Redirecionar para a página inicial
+            window.location.href = '/'; // ou a URL da sua home
+        }
+
+        function restartVoting() {
+            // Função removida - agora só vai para home
+            goToHome();
+        }
+
+        // Função para carregar os participantes da API
+        async function loadParticipants() {
+            try {
+                showLoading('Carregando participantes...');
+                
+                const response = await fetch('/list_all_participants?votacao=true');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                fantasias = data; // Assumindo que a API retorna um array de participantes
+                
+                console.log(`Carregados ${fantasias.length} participantes`);
+                
+                // Verificar se há participantes suficientes
+                if (fantasias.length < 2) {
+                    showError('Não há participantes suficientes para iniciar a votação.');
+                    return;
+                }
+                
+                // Iniciar votação
+                loadNewPair();
+                
+            } catch (error) {
+                console.error('Erro ao carregar participantes:', error);
+                showError('Erro ao carregar os participantes. Tente novamente.');
+            }
+        }
+
+        function showLoading(message = 'Carregando...') {
+            const loadingEl = document.getElementById('loading');
+            loadingEl.querySelector('h3').textContent = message;
+            loadingEl.classList.add('show');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.remove('show');
+        }
+
+        function showError(message) {
+            hideLoading();
+            alert(message); // Você pode substituir por um modal mais elegante
+        }
+
+        // Inicializar carregando os participantes da API
+        document.addEventListener('DOMContentLoaded', function() {
+            loadParticipants();
+        });
+    </script>
+</body>
+</html>

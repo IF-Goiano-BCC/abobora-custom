@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Votação de Fantasias | Abóbora Contest 2025</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f5f7fa;
+      color: #2c3e50;
+      min-height: 100vh;
+    }
+
+    header {
+      background-color: #ffffff;
+      padding: 40px 20px;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      margin: 0;
+      color: #4CAF50;
+    }
+
+    section {
+      max-width: 960px;
+      margin: 30px auto;
+      padding: 30px;
+      background-color: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    }
+
+    .section-title {
+      font-size: 2rem;
+      margin-bottom: 20px;
+      color: #ff8c00;
+    }
+
+    .fantasy-card {
+      display: flex;
+      flex-direction: column;
+      background-color: #fffaf0;
+      border: 1px solid #ffe0b2;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .fantasy-card img {
+      max-width: 100%;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+
+    .fantasy-info h3 {
+      margin: 0;
+      color: #ff8c00;
+    }
+
+    .fantasy-info p {
+      margin: 5px 0;
+    }
+
+    .vote-button {
+      margin-top: 10px;
+      display: inline-block;
+      padding: 10px 20px;
+      background-color: #ff8c00;
+      color: #fff;
+      border-radius: 6px;
+      font-weight: bold;
+      text-decoration: none;
+      transition: background-color 0.3s, transform 0.2s;
+    }
+
+    .vote-button:hover {
+      background-color: #e07b00;
+      transform: translateY(-2px);
+    }
+
+    @media (max-width: 600px) {
+      .section-title {
+        font-size: 1.5rem;
+      }
+
+    .voting-component {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 20px;
+  }
+
+  .vote-button {
+    padding: 12px 24px;
+    background-color: #ff8c00;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .vote-button:hover {
+    background-color: #e07b00;
+    transform: translateY(-2px);
+  }
+
+  .vote-count {
+    padding: 6px 12px;
+    background-color: #fff7ec;
+    border: 1px solid #ffe0b3;
+    border-radius: 8px;
+    color: #ff8c00;
+    font-weight: 600;
+    font-size: 0.95rem;
+    min-width: 50px;
+    text-align: center;
+  }
+
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>🎭 Galeria de Fantasias</h1>
+    <p>Veja as fantasias participantes! Qual é sua favorita?</p>
+  </header>
+
+  <section>
+    <h2 class="section-title">🗳️ Fantasias em Destaque</h2>
+
+    <!-- Exemplo de Card de Fantasia -->
+    {{ range .fantasias }}
+      <div class="fantasy-card">
+        <img src="{{.UrlFoto}}" alt="{{.Nome_fantasia}}">
+        <div class="fantasy-info">
+          <h3>🎃 {{.Nome_fantasia}}</h3>
+          <p><strong>Participante:</strong> {{.Nome_participante}}</p>
+          {{ if .Descricao }}
+            <p><strong>Descrição:</strong> {{.Descricao}}</p>
+          {{end}}
+        </div>
+      </div>
+    {{end}}    
+
+  </section>
+</body>
+   <script>
+    function votar(id) {
+      fetch(`/votar/${id}`)
+        .then(response => response.json())
+        .then(data => console.log(data))
+        .catch(error => console.error('Error:', error));
+    }
+    </script>
+</html>
+

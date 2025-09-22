@@ -90,11 +90,12 @@
   <body>
 
   <script>
-    {% if isAlert == "sucesso" %}
+    {{ if eq .isAlert "sucesso" }}
       alert("fantasia inscrita com sucesso!")
-    {% elif isAlert == "falha" %}
+    {{ end }}
+    {{ if eq .isAlert "falha" }}
       alert("fantasia não inscrita.")
-    {% endif %}
+    {{ end }}
   </script>
 
   <header>

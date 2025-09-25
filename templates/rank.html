@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Admin</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.7/dist/htmx.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/mask@3.x.x/dist/cdn.min.js"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+</head>
+
+<body>
+  {{ template "component_navbar.html" . }}
+
+    <section class="section">
+        <div class="container">
+        <h1 class="title">Ranking de Cosplays</h1>
+
+                <div class="columns is-multiline">
+                    {{ range $index, $cosplay := .Cosplays }}
+                    <div class="column is-one-quarter">
+                        <div class="card">
+                            <div class="card-image">
+                                <figure class="image is-3by4">
+                                    <img src="{{ $cosplay.ImagePath }}" alt="Imagem do cosplay {{ $cosplay.Nome }}">
+                                </figure>
+                            </div>
+                            <div class="card-content">
+                                <div class="media">
+                                    <div class="media-content">
+                                        <p class="title is-4">{{ $cosplay.Nome }}</p>
+                                        <p class="subtitle is-6">#{{  $index }}</p>
+                                    </div>
+                                </div>
+                                <div class="content">
+                                    {{ $cosplay.Desc }}
+                                </div>
+                            </div>
+                            <footer class="card-footer">
+                                <span class="card-footer-item">
+                                    <span class="icon-text">
+                                        <span class="icon">
+                                            <i class="fas fa-star"></i>
+                                        </span>
+                                        <span>{{ $cosplay.VoteCount }} votos</span>
+                                    </span>
+                                </span>
+                            </footer>
+                        </div>
+                    </div>
+                    {{ else }}
+                    <div class="column">
+                        <div class="notification is-warning">Nenhum cosplay encontrado.</div>
+                    </div>
+                    {{ end }}
+                </div>
+        </div>
+</body>
+</html>

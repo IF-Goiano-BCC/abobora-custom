@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosplay Voting</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <style>
+        body {
+            overflow-y: hidden;
+            /* Disables vertical scrolling */
+        }
+
+        body {
+            overflow-x: hidden;
+            /* Disables horizontal scrolling */
+        }
+
+        .parent-container {
+            position: static;
+            /* Or use flexbox for centering */
+            height: 200px;
+            z-index: 10;
+            /* Example height for context */
+        }
+
+        .custom-positioned-button {
+            position: sticky;
+            top: 50%;
+            z-index: 20;
+            /* add transparencity */
+            background-color: rgba(255, 255, 255, 0.5);
+            color: black;
+            border: none;
+            cursor: pointer;
+
+            /* Adjust this value to move it further left or right */
+            transform: translateY(-50%);
+            /* Vertically centers the button */
+        }
+
+        .is-left {
+            left: 10px;
+            float: left;
+        }
+
+        .is-right {
+            right: 10px;
+            float: right;
+        }
+    </style>
+</head>
+
+<body class="has-background-light" x-data="cosplayVoting"
+            @touchstart="startX = $event.touches[0].clientX"
+         @touchend="endX = $event.changedTouches[0].clientX; thochSwap();"
+>
+    <section   x-show="!initialized" class="hero is-fullheight is-info">
+        <div class="hero-body">
+            <div class="container has-text-centered">
+                <p class="title">
+                    Votação de Cosplays
+                    <br>
+                    <span x-text="current"></span> / <span x-text="pairs.length"></span>
+                </p>
+                <p class="subtitle">
+                    Escolha o melhor cosplay!
+                </p>
+                <button x-show="!initialized" class="button is-primary is-large" x-on:click="initialized = true;">
+                    Iniciar Votação
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section x-show="finished" class="hero is-danger is-fullheight">
+        <div class="hero-body">
+            <div class="container has-text-centered">
+                <p class="title">Votação Finalizada</p>
+                <p class="subtitle">Obriado pela sua participação</p>
+            </div>
+        </div>
+    </section>
+
+    <div x-show="!finished && initialized" class="container is-fullheight">
+        <header class="card-header" style="height: 5vh;">
+            <p class="card-header-title">
+                Vote no seu cosplay favorito 
+                <span style="margin-left: 2vw;" x-text="current + 1"></span> / <span x-text="pairs.length"></span>
+
+            </p>
+                
+        </header>
+        <div class="card">
+            <div x-show="!canVote" class="tag is-danger" style="margin-left: 2vw;">
+                    araste para Ver o outro                     
+                </div>
+            <button class="button is-rounded is-left custom-positioned-button" @click="swap()" @touch="">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <path d="M20 8L12 16L20 24" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+            </button>
+            <button class="button is-rounded is-right custom-positioned-button" @click="swap()">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <path d="M12 8L20 16L12 24" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+                        stroke-linejoin="round" />
+                </svg>
+            </button>
+
+            <div class="card-image">
+                <figure class="image">
+                    <img style="height: 70dvh; width: 70vw; margin-left: 15vw;" :src="pairs[current][shown].img" alt="Cosplay image">
+                </figure>
+            </div>
+            <div class="card-content">
+                <div class="content">
+                    <p x-text="pairs[current][shown].name"></p>
+                </div>
+            </div>
+            <footer style="height: 10vh" class="card-footer">
+                <button x-on:click="vote(shown)" :disabled="!canVote"
+                    :class="canVote ? 'card-footer-item button is-success' : 'card-footer-item button is-disabled'">
+                    <span class="icon">
+                        <i class="fas fa-thumbs-up"></i>
+                    </span>
+                    <span>Votar</span>
+                </button>
+            </footer>
+        </div>
+
+
+    </div>
+
+
+
+
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('cosplayVoting', () => ({
+                // Example Nx2 matrix, replace with server data
+                pairs: {{ .Pairs | json }},
+
+                current: 0,
+                shown: 0, // 0 or 1
+                initialized: false,
+                canVote: false,
+                votes: [],
+                finished: false,
+                startX: 0, 
+                endX: 0,
+                thochSwap(){
+                    if (this.startX - this.endX > 50) {
+                        // Swiped left
+                        this.swap();
+                    } else if (this.endX - this.startX > 50) {
+                        // Swiped right   s
+                        this.swap();
+                    }
+                },
+                swap() {
+                    if (this.finished){
+                         return;
+                        }
+                    this.shown = (this.shown + 1) % 2;
+                    this.canVote = true;
+                },
+                sendVoteToServer(vote) {
+                    const form = new FormData();
+                    form.append('vote', this.pairs[this.current][vote].id);
+                    form.append('opt1', this.pairs[this.current][0].id);
+                    form.append('opt2', this.pairs[this.current][1].id);
+                    fetch('/vote', {
+                        method: 'POST',
+                        body: form
+                    }).then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    }).then(data => {
+                        console.log('Vote successfully sent:', data);
+                    }).catch(error => {
+                        console.error('There was a problem with the fetch operation:', error);
+                    });
+                    // Placeholder for sending vote t
+                    // o server
+                    console.log('Vote sent to server:', vote);
+                },
+                vote(sel) {
+                    const voted = this.pairs[this.current][sel]
+                    this.votes[this.current] = sel;
+                    this.canVote = false;
+                    this.sendVoteToServer(sel);
+                    if (this.current < this.pairs.length - 1) {
+                        this.current++;
+                        this.shown = 0;
+                    } else {
+    
+                        this.finished = true;
+                    }
+                },
+            }))
+        })
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,645 @@
+package main
+
+import (
+	"context"
+	"encoding/base64"
+	"fmt"
+	"html/template"
+	"log"
+	"math/rand"
+	"net/http"
+	"os"
+	"sort"
+	"time"
+
+	"encoding/json"
+
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
+
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
+	"github.com/skip2/go-qrcode"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+)
+
+// db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+
+const (
+	addr     = ":8080"
+	interval = 5 // seconds
+)
+
+var tmpl *template.Template
+
+var currentCode string
+var clients = make(map[*websocket.Conn]bool)
+
+type Session struct {
+	Type  string // "normal" or "adm"\
+	votes int
+}
+
+var sessions = make(map[string]Session) // sessionID -> Session
+
+var allowNewSessions bool = true
+var allowVotes bool = true
+var dsn string
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
+}
+
+func getEnv(key, defaultVal string) string {
+	val := os.Getenv(key)
+	if val != "" {
+		return val
+	}
+	return defaultVal
+}
+
+type Cosplay struct {
+	ID        uint `gorm:"primaryKey"`
+	Nome      string
+	Desc      string
+	Email     *string
+	Numero    *string // optinal
+	ImagePath string
+}
+
+type CosplayVote struct {
+	CosplayID uint   `json:"id"`
+	Desc      string `json:"name"`
+	ImagePath string `json:"img"`
+}
+type Vote struct {
+	ID               uint `gorm:"primaryKey"`
+	SessionID        string
+	CosplayOption1Id uint
+	CosplayOption2Id uint
+	CosplayVotedId   uint
+	Timestamp        time.Time
+}
+
+var minioClient *minio.Client
+var err error
+
+
+type CosplayWithVotes struct {
+	Cosplay
+	VoteCount int64
+}
+
+func main() {
+	// Parse all templatesRat startup
+	minioClient, err = minio.New(getEnv("MINIO_URL", "localhost:9000/"), &minio.Options{ Creds:  credentials.NewStaticV4(getEnv("MINIO_USER", "Miniouser"), getEnv("MINIO_PASSWORD", "Miniopassword"),  ""),
+		Secure: false,
+	 })
+
+	dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC",
+		getEnv("DB_HOST", "localhost"),
+		getEnv("DB_USER", "myuser"),
+		getEnv("DB_PASSWORD", " mypassword"),
+		getEnv("DB_NAME", "mydb"),
+		getEnv("DB_PORT", "5432"),
+	)
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+
+	if err != nil {
+		panic("failed to connect database")
+	}
+
+	db.AutoMigrate(&Cosplay{})
+	db.AutoMigrate(&Vote{})
+
+	// Seed random number generator
+
+	currentCode = fmt.Sprintf("%06d", rand.Intn(1000000))
+	funcMap := template.FuncMap{
+		"json": func(v interface{}) template.JS {
+			b, err := json.Marshal(v)
+			if err != nil {
+				return ""
+			}
+			return template.JS(b)
+		},
+	}
+	tmpl = template.New("").Funcs(funcMap)
+	tmpl = template.Must(tmpl.ParseGlob("templates/**.html"))
+
+	http.HandleFunc("/", serveHTML)
+	http.HandleFunc("/ws", wsHandler)
+	http.HandleFunc("/vote", codeSessionMiddleware(voteHandler))
+	http.HandleFunc("/new-cosplay", newCosplayForm)
+	http.HandleFunc("/login", loginHandler)
+	http.HandleFunc("/admin", adminSessionMiddleware(adminPanel))
+	http.HandleFunc("/admin-controls", adminSessionMiddleware(AdminControlsHandler))
+	http.HandleFunc("/admin/rank", adminSessionMiddleware(CosplayRankHandler))
+	http.HandleFunc("/admin/delete-cosplay", adminSessionMiddleware(adminDeleteCosplay))
+	// Serve static files from ./static/ at /static/
+	fs := http.FileServer(http.Dir("static"))
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
+
+	go codeUpdater()
+
+	log.Printf("Server running at http://localhost%s", addr)
+	log.Fatal(http.ListenAndServe(addr, nil))
+}
+
+func loginHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	if r.Method == http.MethodPost {
+		// Process login
+		username := r.FormValue("username")
+		password := r.FormValue("password")
+		if username == getEnv("ADMIN_LOGIN", "admin") && password == getEnv("ADMIN_PASSWORD", "password") {
+			sessionID := uuid.New().String()
+			http.SetCookie(w, &http.Cookie{
+				Name:  "session_id",
+				Value: sessionID,
+			})
+			sessions[sessionID] = Session{Type: "adm", votes: 0}
+			http.Redirect(w, r, "/admin", http.StatusSeeOther)
+			return
+		}
+	}
+	err := tmpl.ExecuteTemplate(w, "login.html", nil)
+	if err != nil {
+		http.Error(w, "Template execute error", http.StatusInternalServerError)
+		log.Println("Template execute error:", err)
+	}
+}
+
+func newCosplayForm(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	if r.Method == http.MethodPost {
+		err := r.ParseMultipartForm(10 << 20)
+		if err != nil {
+			http.Error(w, "Deu ruim", http.StatusInternalServerError)
+		}
+		// Process form submission
+		nome := r.FormValue("nome")
+		desc := r.FormValue("desc")
+		email := r.FormValue("email")
+		numero := r.FormValue("numero")
+
+		file, handler, err := r.FormFile("foto")
+		if err != nil {
+			http.Error(w, "Error retrieving the file", http.StatusInternalServerError)
+			log.Println("Error retrieving the file:", err)
+			return
+		}
+		defer file.Close()
+		// gen randon name to the file
+		// save file to static/uploads/
+		new_file_name := uuid.New().String() + "_" + handler.Filename
+		imagePath := "http://" + getEnv("MINIO_URL", "localhost:9000/") + getEnv("MINIO_BUCKET", "fantasias") + "/" + new_file_name
+
+		_, err = minioClient.PutObject(context.Background(), getEnv("MINIO_BUCKET", "fantasias"), new_file_name, file, handler.Size, minio.PutObjectOptions{
+			ContentType: "application/octet-stream", // Set appropriate Content-Type
+		})
+
+		if err != nil {
+			http.Error(w, "Error saving the file", http.StatusInternalServerError)
+			log.Println("Error saving the file:", err)
+			return
+		}
+
+		// TODO: change to Minio or S3
+		// save to db
+		cosplay := Cosplay{
+			Nome:      nome,
+			Desc:      desc,
+			ImagePath: imagePath,
+		}
+		if email != "" {
+			cosplay.Email = &email
+		}
+		if numero != "" {
+			cosplay.Numero = &numero
+		}
+			
+		//_, err = dst.ReadFrom(file)
+
+		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		if err != nil {
+			http.Error(w, "Database connection error", http.StatusInternalServerError)
+			return
+		}
+		ctx := context.Background()
+		err = gorm.G[Cosplay](db).Create(ctx, &cosplay)
+		if err != nil {
+			http.Error(w, "Database insert error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	var data = struct {
+		Created bool
+	}{
+		Created: r.Method == http.MethodPost,
+	}
+	err := tmpl.ExecuteTemplate(w, "component_cosplay_form.html", data)
+	if err != nil {
+		http.Error(w, "Template execute error", http.StatusInternalServerError)
+		log.Println("Template execute error:", err)
+	}
+}
+
+func adminDeleteCosplay(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idStr := r.FormValue("id")
+	var id uint
+	_, err := fmt.Sscanf(idStr, "%d", &id)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		http.Error(w, "Database connection error", http.StatusInternalServerError)
+		return
+	}
+	ctx := context.Background()
+	_, err = gorm.G[Cosplay](db).Where("ID = ?", id).Delete(ctx)
+
+	if err != nil {
+		http.Error(w, "Database delete error", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprintf(w, `<script>alert("delete")</script>`)
+}
+
+func adminPanel(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+
+	if err != nil {
+		http.Error(w, "Database connection error", http.StatusInternalServerError)
+		return
+	}
+
+	ctx := context.Background()
+
+	cosplays, err := gorm.G[Cosplay](db).Find(ctx)
+
+	if err != nil {
+		http.Error(w, "Database query error", http.StatusInternalServerError)
+		return
+	}
+	// structo cosplays, allowcode and allowvotes
+	data := struct {
+		Cosplays   []Cosplay
+		Allowcode  bool
+		Allowvotes bool
+		Created    bool
+	}{
+		Cosplays:   cosplays,
+		Allowcode:  allowNewSessions,
+		Allowvotes: allowVotes,
+		Created:    false}
+
+	err = tmpl.ExecuteTemplate(w, "admin.html", data)
+	if err != nil {
+		http.Error(w, "Template execute error", http.StatusInternalServerError)
+		log.Println("Template execute error:", err)
+	}
+
+	return
+
+}
+
+func AdminControlsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	action := r.URL.Query().Get("action")
+
+	switch action {
+	case "toggle_votes":
+		allowVotes = !allowVotes
+	case "toggle_sessions":
+		allowNewSessions = !allowNewSessions
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+}
+
+func serveHTML(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	err := tmpl.ExecuteTemplate(w, "index.html", nil)
+	if err != nil {
+		http.Error(w, "Template execute error", http.StatusInternalServerError)
+		log.Println("Template execute error:", err)
+	}
+}
+
+func wsHandler(w http.ResponseWriter, r *http.Request) {
+	c, err := upgrader.Upgrade(w, r, nil)
+
+	if err != nil {
+		log.Println("WebSocket upgrade error:", err)
+		return
+	}
+	defer c.Close()
+
+	clients[c] = true
+	url := fmt.Sprintf("http://%s/", r.Host)
+	sendCurrentCode(c, url)
+
+	for {
+		_, _, err := c.ReadMessage()
+		if err != nil {
+			delete(clients, c)
+			c.Close()
+			break
+		}
+	}
+}
+
+func sendCurrentCode(c *websocket.Conn, url string) {
+	voteURL := fmt.Sprintf("%svote?code=%s", url, currentCode)
+	png, err := qrcode.Encode(voteURL, qrcode.Medium, 256)
+	if err != nil {
+		log.Println("QR encode error:", err)
+		return
+	}
+	msg := fmt.Sprintf(`{"qr":"data:image/png;base64,%s","code":"%s"}`,
+		encodeBase64(png), currentCode)
+	err = c.WriteMessage(websocket.TextMessage, []byte(msg))
+	if err != nil {
+		log.Println("WebSocket write error:", err)
+		return
+	}
+}
+
+func CosplayRankHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	cosplays := listAllcosplayswithVotes()
+	data := struct {
+		Cosplays []CosplayWithVotes
+	}{
+		Cosplays: cosplays,
+	}
+	err := tmpl.ExecuteTemplate(w, "rank.html", data)
+	if err != nil {
+		http.Error(w, "Template execute error", http.StatusInternalServerError)
+		log.Println("Template execute error:", err)
+		return
+	}
+}
+
+func listAllcosplayswithVotes() []CosplayWithVotes {
+	// list all cosplays with votes count
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Println("Database connection error:", err)
+		return []CosplayWithVotes{}
+	}
+	var results []CosplayWithVotes
+	err = db.Model(&Cosplay{}).
+		Select("cosplays.*, COUNT(votes.id) as vote_count").
+		Joins("LEFT JOIN votes ON votes.cosplay_voted_id = cosplays.id").
+		Group("cosplays.id").
+		Scan(&results).Error
+	if err != nil {
+		log.Println("Database query error:", err)
+		return []CosplayWithVotes{}
+	}
+	for _, r := range results {
+		log.Printf("Cosplay: %s, Votes: %d\n", r.Cosplay.Desc, r.VoteCount)
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].VoteCount > results[j].VoteCount
+	})
+	return results
+}
+
+func getRandomCosplayPairs(npairs int) [][2]CosplayVote {
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Println("Database connection error:", err)
+		return [][2]CosplayVote{}
+	}
+	ctx := context.Background()
+	cosplays, err := gorm.G[Cosplay](db).Find(ctx)
+	if err != nil {
+		log.Println("Database query error:", err)
+		return [][2]CosplayVote{}
+	}
+	if len(cosplays) < 2 {
+		return [][2]CosplayVote{}
+	}
+	rand.Shuffle(len(cosplays), func(i, j int) {
+		cosplays[i], cosplays[j] = cosplays[j], cosplays[i]
+	})
+	var maxRepeatedCosplays int
+	if len(cosplays)%2 == 0 {
+		maxRepeatedCosplays = len(cosplays) / 2
+	} else {
+		maxRepeatedCosplays = (len(cosplays) - 1) / 2
+	}
+	pairs := make([][2]CosplayVote, 0, npairs)
+	used := make(map[uint]int) // cosplay ID -> count of times used
+	if npairs > len(cosplays)/2 {
+	}
+
+	for _, c := range cosplays {
+		if used[c.ID] >= maxRepeatedCosplays {
+			continue
+		}
+		for _, c2 := range cosplays {
+			if c.ID != c2.ID && used[c2.ID] < maxRepeatedCosplays {
+				pairs = append(pairs, [2]CosplayVote{
+					{CosplayID: c.ID, Desc: c.Desc, ImagePath: c.ImagePath},
+					{CosplayID: c2.ID, Desc: c2.Desc, ImagePath: c2.ImagePath},
+				})
+				fmt.Println("Pair:", c.Desc, c2.Desc, c)
+
+				used[c.ID] = used[c.ID] + 1
+				used[c2.ID] = used[c2.ID] + 1
+				break
+			}
+		}
+		if len(pairs) >= npairs {
+			break
+		}
+	}
+	return pairs
+
+}
+
+func voteHandler(w http.ResponseWriter, r *http.Request) {
+	// At this point, code and session are validated and session is set in context
+
+	if r.Method == http.MethodPost {
+		// process vote submission
+		vote_str := r.FormValue("vote")
+		opt1_str := r.FormValue("opt1")
+		opt2_str := r.FormValue("opt2")
+		sessionCookie, err := r.Cookie("session_id")
+		if err != nil || sessionCookie.Value == "" {
+			http.Error(w, "Session cookie missing", http.StatusBadRequest)
+			return
+		}
+		var vote, opt1, opt2 uint
+		_, err = fmt.Sscanf(vote_str, "%d", &vote)
+		if err != nil {
+			http.Error(w, "Invalid vote value", http.StatusBadRequest)
+			return
+		}
+		_, err = fmt.Sscanf(opt1_str, "%d", &opt1)
+		if err != nil {
+			http.Error(w, "Invalid opt1 value", http.StatusBadRequest)
+			return
+		}
+		_, err = fmt.Sscanf(opt2_str, "%d", &opt2)
+		if err != nil {
+			http.Error(w, "Invalid opt2 value", http.StatusBadRequest)
+			return
+		}
+
+		VoteCreate := Vote{
+			SessionID:        sessionCookie.Value,
+			CosplayOption1Id: uint(opt1),
+			CosplayOption2Id: uint(opt2),
+			CosplayVotedId:   uint(vote),
+			Timestamp:        time.Now(),
+		}
+		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		if err != nil {
+			http.Error(w, "Database connection error", http.StatusInternalServerError)
+			return
+		}
+
+		ctx := context.Background()
+		err = gorm.G[Vote](db).Create(ctx, &VoteCreate)
+		if err != nil {
+			http.Error(w, "Database insert error", http.StatusInternalServerError)
+			return
+		}
+		// return ok js msg
+		fmt.Fprintf(w, `{"status":"ok"}`)
+		return
+	}
+
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// process vote options
+	w.Header().Set("Content-Type", "text/html")
+	pairs := getRandomCosplayPairs(5)
+	if len(pairs) == 0 {
+		http.Error(w, "Not enough cosplays to vote", http.StatusInternalServerError)
+		return
+	}
+	// struct with pairs and current index
+	data := struct {
+		Pairs   [][2]CosplayVote
+		Current int
+	}{
+		Pairs:   pairs,
+		Current: 0,
+	}
+	err := tmpl.ExecuteTemplate(w, "votes.html", data)
+	if err != nil {
+		http.Error(w, "Template execute error", http.StatusInternalServerError)
+		log.Println("Template execute error:", err)
+		return
+	}
+}
+
+func adminSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie("session_id")
+		if err != nil || cookie.Value == "" {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		sessionID := cookie.Value
+		sess, ok := sessions[sessionID]
+		if !ok || sess.Type != "adm" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
+// Middleware for code/session validation
+func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		code := r.URL.Query().Get("code")
+		var sessionID string = ""
+
+		cookie, err := r.Cookie("session_id")
+		fmt.Println("erro", err)
+		fmt.Println("code", cookie)
+
+		if err == nil && cookie.Value != "" {
+			sess, ok := sessions[sessionID]
+			fmt.Println("sess", sess)
+			fmt.Println("ok", ok)
+			// Valid session found
+			if ok && (sess.Type == "normal" || sess.Type == "adm") && allowVotes {
+				next(w, r)
+				return
+			}
+		}
+
+		if code != currentCode && !allowNewSessions {
+			w.Header().Set("Content-Type", "text/html")
+			err := tmpl.ExecuteTemplate(w, "not_allowed.html", nil)
+			if err != nil {
+				http.Error(w, "Template execute error", http.StatusInternalServerError)
+				log.Println("Template execute error:", err)
+			}
+			http.Error(w, "Invalid code or session", http.StatusBadRequest)
+			return
+		}
+
+		// Create new session if none exists and code is valid
+		if err != nil || cookie.Value == "" {
+			sessionID = uuid.New().String()
+			http.SetCookie(w, &http.Cookie{
+				Name:     "session_id",
+				Value:    sessionID,
+				Path:     "/",
+				HttpOnly: true,
+				MaxAge:   3600,
+			})
+			// Default to normal user, you can add logic to set adm type
+			sessions[sessionID] = Session{Type: "normal", votes: 0}
+		}
+
+		next(w, r)
+	}
+}
+
+func codeUpdater() {
+	for {
+		currentCode = fmt.Sprintf("%06d", rand.Intn(1000000))
+		broadcastCode()
+		time.Sleep(interval * time.Second)
+	}
+}
+
+func broadcastCode() {
+	for c := range clients {
+		url := getEnv("APP_DOMAIN", "http://localhost:8080/") // You may want to make this dynamic
+		sendCurrentCode(c, url)
+	}
+}
+
+func encodeBase64(data []byte) string {
+	return base64.StdEncoding.EncodeToString(data)
+}

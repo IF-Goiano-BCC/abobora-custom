@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Admin</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.7/dist/htmx.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/mask@3.x.x/dist/cdn.min.js"></script>
+  <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+</head>
+
+<body>
+  {{ template "component_navbar.html" . }}
+  <section class="section" x-data="{ cosplayModalOpen: false }">
+    <div class="container has-text-centered">
+      <h1 class="title">Painel de Administração</h1>
+      <div class="buttons is-centered">
+        <a c {{if .Allowvotes }} class="button is-success" {{else }}  class="button is-danger"  {{ end }}
+          href="/admin-controls?action=toggle_votes" name="action" value="toggle_sessions" type="submit">
+          {{if .Allowvotes }}Desativar{{ else }}Ativar{{ end }}
+          Votação
+        </a>
+        <a 
+        {{if .Allowcode }} class="button is-success" {{else }}  class="button is-danger"  {{ end }}
+          href="/admin-controls?action=toggle_sessions" name="action" value="toggle_code" type="submit">
+          {{ if .Allowcode }}Desativar{{ else }}Ativar{{ end }}
+          Código
+        </a>
+      </div>
+    </div>
+
+    <div class="container mt-6">
+      <div class="level">
+        <div class="level-left">
+          <h2 class="subtitle">Cosplays cadastrados</h2>
+        </div>
+        <div class="level-right">
+          <button class="button is-primary" id="addCosplayBtn" x-on:click="cosplayModalOpen = true">
+            Adicionar novo Cosplay
+          </button>
+        </div>
+      </div>
+
+      <div class="columns is-multiline">
+        {{ range .Cosplays }}
+        <div class="column is-one-third">
+          <div class="card">
+            <div class="card-image">
+              <figure class="image is-3by4">
+                <img src="{{ .ImagePath }}" alt="Cosplay image">
+              </figure>
+            </div>
+            <div class="card-content">
+              <div class="content">
+                <strong>{{ .Nome }}</strong><br>
+                <span>{{ .Desc }}</span><br>
+                {{ if .Email }}<span>Email: {{ .Email }}</span><br>{{ end }}
+                {{ if .Numero }}<span>Número: {{ .Numero }}</span><br>{{ end }}
+              </div>
+            </div>
+            <footer class="card-footer">
+              <button class="card-footer-item button is-danger is-light" 
+                hx-post="/admin/delete-cosplay?id={{ .ID }}" hx-target="closest .column" hx-swap="outerHTML">
+                Excluir
+              </button>
+              <button class="card-footer-item button is-info is-light" 
+                hx-get="/admin/edit-cosplay?id={{ .ID }}" hx-target="#cosplayModalContent" hx-swap="innerHTML" onclick="openCosplayModal()">
+                Editar
+              </button>
+            </footer>
+          </div>
+        </div>
+        {{ end }}
+      </div>
+    </div>
+
+    <!-- Modal for add/edit cosplay -->
+    <div class="modal is-active" x-show="cosplayModalOpen" id="cosplayModal">
+      <div class="modal-background" x-on:click="cosplayModalOpen = false"></div>
+      <div class="modal-card">
+        <header class="modal-card-head">
+          <p class="modal-card-title">Cosplay</p>
+          <button class="delete" aria-label="close" x-on:click="cosplayModalOpen = false"></button>
+        </header>
+        <section class="modal-card-body" id="cosplayModalContent">
+         {{template "component_cosplay_form.html" .}}
+        </section>
+      </div>
+    </div>
+  </section>
+  <script>
+        function cosplayForm() {
+            return {
+                imagePreview: null,
+                previewImage(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            this.imagePreview = e.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

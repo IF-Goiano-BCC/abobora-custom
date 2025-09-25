@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<title>QR Code WebSocket Demo</title>
+	<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+	<script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
+
+</head>
+
+<body>
+	<div x-data="qrApp()" class="container" style="text-align:center;margin-top:50px;">
+		<style>
+			#qrcode {
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				margin: 0 auto 20px auto;
+				width: fit-content;
+			}
+		</style>
+		<h2>Dynamic QR Code</h2>
+		
+		<div id="qrcode"></div>
+		<p>Code: <span x-text="code"></span></p>
+		<p>
+			<a :href="qrLink" x-text="qrLink" target="_blank" style="word-break:break-all;"></a>
+		</p>
+	</div>
+	<script>
+
+
+
+		// Get the container element
+		let qrcodeContainer = document.getElementById("qrcode");
+
+		// Clear any existing content in the container (optional, useful for dynamic updates)
+	
+
+		// Create a new QRCode instance
+
+		function qrApp() {
+			return {
+				qrSrc: '',
+				code: '',
+				qrLink: '',
+
+				ws: null,
+				init() {
+					this.ws = new WebSocket('ws://' + window.location.host + '/ws');
+					this.ws.onmessage = (e) => {
+						let data = JSON.parse(e.data);
+						this.qrSrc = data.qr;
+						this.code = data.code;
+						this.qrLink = window.location.origin + '/vote?code=' + data.code;
+						qrcodeContainer.innerHTML = "";
+						new QRCode(qrcodeContainer, {
+							text: this.qrLink, // The data to encode
+							width: 128*4,                     // Optional: specify width
+							height: 128*4,                    // Optional: specify height
+							colorDark: "#000000",           // Optional: dark color
+							colorLight: "#ffffff",          // Optional: light color
+							correctLevel: QRCode.CorrectLevel.H // Optional: error correction level
+						});
+					};
+				}
+			}
+		}
+	</script>
+</body>
+
+</html>

@@ -31,6 +31,8 @@ const (
 	interval = 5 // seconds
 )
 
+const expiry = time.Duration(24) * time.Hour
+
 var tmpl *template.Template
 
 var currentCode string
@@ -45,10 +47,14 @@ var sessions = make(map[string]Session) // sessionID -> Session
 
 var allowNewSessions bool = true
 var allowVotes bool = true
+var max_votes_per_session int = 10
 var dsn string
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
+
+var MINIO_BUCKET string
+var MINIO_URL string
 
 func getEnv(key, defaultVal string) string {
 	val := os.Getenv(key)
@@ -82,8 +88,8 @@ type Vote struct {
 }
 
 var minioClient *minio.Client
-var err error
 
+// var err error
 
 type CosplayWithVotes struct {
 	Cosplay
@@ -92,10 +98,15 @@ type CosplayWithVotes struct {
 
 func main() {
 	// Parse all templatesRat startup
-	minioClient, err = minio.New(getEnv("MINIO_URL", "localhost:9000/"), &minio.Options{ Creds:  credentials.NewStaticV4(getEnv("MINIO_USER", "Miniouser"), getEnv("MINIO_PASSWORD", "Miniopassword"),  ""),
+	MINIO_BUCKET = getEnv("MINIO_BUCKET", "cosplay")
+	MINIO_URL = getEnv("MINIO_URL", "localhost:9000/")
+	var err error
+	minioClient, err = minio.New(MINIO_URL, &minio.Options{Creds: credentials.NewStaticV4(getEnv("MINIO_USER", "Miniouser"), getEnv("MINIO_PASSWORD", "Miniopassword"), ""),
 		Secure: false,
-	 })
-
+	})
+	if err != nil {
+		log.Fatalln("Error initializing MinIO client:", err)
+	}
 	dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC",
 		getEnv("DB_HOST", "localhost"),
 		getEnv("DB_USER", "myuser"),
@@ -127,10 +138,10 @@ func main() {
 	tmpl = template.New("").Funcs(funcMap)
 	tmpl = template.Must(tmpl.ParseGlob("templates/**.html"))
 
-	http.HandleFunc("/", serveHTML)
+	http.HandleFunc("/", adminSessionMiddleware(serveHTML))
 	http.HandleFunc("/ws", wsHandler)
 	http.HandleFunc("/vote", codeSessionMiddleware(voteHandler))
-	http.HandleFunc("/new-cosplay", newCosplayForm)
+	http.HandleFunc("/new-cosplay", adminSessionMiddleware(newCosplayForm))
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/admin", adminSessionMiddleware(adminPanel))
 	http.HandleFunc("/admin-controls", adminSessionMiddleware(AdminControlsHandler))
@@ -193,9 +204,8 @@ func newCosplayForm(w http.ResponseWriter, r *http.Request) {
 		// gen randon name to the file
 		// save file to static/uploads/
 		new_file_name := uuid.New().String() + "_" + handler.Filename
-		imagePath := "http://" + getEnv("MINIO_URL", "localhost:9000/") + getEnv("MINIO_BUCKET", "fantasias") + "/" + new_file_name
 
-		_, err = minioClient.PutObject(context.Background(), getEnv("MINIO_BUCKET", "fantasias"), new_file_name, file, handler.Size, minio.PutObjectOptions{
+		_, err = minioClient.PutObject(context.Background(), MINIO_BUCKET, new_file_name, file, handler.Size, minio.PutObjectOptions{
 			ContentType: "application/octet-stream", // Set appropriate Content-Type
 		})
 
@@ -210,7 +220,7 @@ func newCosplayForm(w http.ResponseWriter, r *http.Request) {
 		cosplay := Cosplay{
 			Nome:      nome,
 			Desc:      desc,
-			ImagePath: imagePath,
+			ImagePath: new_file_name,
 		}
 		if email != "" {
 			cosplay.Email = &email
@@ -218,7 +228,7 @@ func newCosplayForm(w http.ResponseWriter, r *http.Request) {
 		if numero != "" {
 			cosplay.Numero = &numero
 		}
-			
+
 		//_, err = dst.ReadFrom(file)
 
 		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
@@ -287,6 +297,16 @@ func adminPanel(w http.ResponseWriter, r *http.Request) {
 
 	cosplays, err := gorm.G[Cosplay](db).Find(ctx)
 
+	// map cosplays to change imagePath values to respond
+	for i := range cosplays {
+		presignedURL, err := minioClient.PresignedGetObject(context.Background(), MINIO_BUCKET, cosplays[i].ImagePath, expiry, nil)
+		if err != nil {
+			log.Println("Error generating presigned URL:", err)
+			// http.Error(w, "Error generating image URL", http.StatusInternalServerError)
+			return
+		}
+		cosplays[i].ImagePath = presignedURL.String()
+	}
 	if err != nil {
 		http.Error(w, "Database query error", http.StatusInternalServerError)
 		return
@@ -325,6 +345,16 @@ func AdminControlsHandler(w http.ResponseWriter, r *http.Request) {
 		allowVotes = !allowVotes
 	case "toggle_sessions":
 		allowNewSessions = !allowNewSessions
+	case "max_votes":
+		maxVotesStr := r.URL.Query().Get("value")
+		var maxVotes int
+		_, err := fmt.Sscanf(maxVotesStr, "%d", &maxVotes)
+		if err != nil || maxVotes < 1 {
+			http.Error(w, "Invalid max votes value", http.StatusBadRequest)
+			return
+		}
+		max_votes_per_session = maxVotes
+		log.Println("Max votes per session set to:", max_votes_per_session)
 	default:
 		http.Error(w, "Invalid action", http.StatusBadRequest)
 		return
@@ -419,6 +449,15 @@ func listAllcosplayswithVotes() []CosplayWithVotes {
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].VoteCount > results[j].VoteCount
 	})
+	for i := range results {
+		presignedURL, err := minioClient.PresignedGetObject(context.Background(), MINIO_BUCKET, results[i].ImagePath, expiry, nil)
+		if err != nil {
+			log.Println("Error generating presigned URL:", err)
+			// http.Error(w, "Error generating image URL", http.StatusInternalServerError)
+		}
+		results[i].ImagePath = presignedURL.String()
+	}
+
 	return results
 }
 
@@ -489,6 +528,15 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Session cookie missing", http.StatusBadRequest)
 			return
 		}
+		sess, ok := sessions[sessionCookie.Value]
+		if !ok {
+			http.Error(w, "Invalid session", http.StatusBadRequest)
+			return
+		}
+		if sess.votes >= max_votes_per_session {
+			http.Error(w, "Vote limit reached for this session", http.StatusForbidden)
+			return
+		}
 		var vote, opt1, opt2 uint
 		_, err = fmt.Sscanf(vote_str, "%d", &vote)
 		if err != nil {
@@ -542,6 +590,18 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not enough cosplays to vote", http.StatusInternalServerError)
 		return
 	}
+
+	// Generate presigned URLs for image paths
+	for i := range pairs {
+		for j := range pairs[i] {
+			presignedURL, err := minioClient.PresignedGetObject(context.Background(), MINIO_BUCKET, pairs[i][j].ImagePath, expiry, nil)
+			if err != nil {
+				log.Println("Error generating presigned URL:", err)
+			}
+			pairs[i][j].ImagePath = presignedURL.String()
+		}
+	}
+
 	// struct with pairs and current index
 	data := struct {
 		Pairs   [][2]CosplayVote

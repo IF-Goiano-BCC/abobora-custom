@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,24 +18,55 @@
     <div class="container has-text-centered">
       <h1 class="title">Painel de Administração</h1>
       <div class="buttons is-centered">
-        <a c {{if .Allowvotes }} class="button is-success" {{else }}  class="button is-danger"  {{ end }}
+        <a c {{if .Allowvotes }} class="button is-success" {{else }} class="button is-danger" {{ end }}
           href="/admin-controls?action=toggle_votes" name="action" value="toggle_sessions" type="submit">
           {{if .Allowvotes }}Desativar{{ else }}Ativar{{ end }}
           Votação
         </a>
-        <a 
-        {{if .Allowcode }} class="button is-success" {{else }}  class="button is-danger"  {{ end }}
+        <a {{if .Allowcode }} class="button is-success" {{else }} class="button is-danger" {{ end }}
           href="/admin-controls?action=toggle_sessions" name="action" value="toggle_code" type="submit">
           {{ if .Allowcode }}Desativar{{ else }}Ativar{{ end }}
           Código
         </a>
       </div>
-    </div>
 
+    </div>
+    <div>
+        <div class="field has-addons">
+          <div class="control">
+            <input type="number" min="1" max="9999" class="input" style="width: 150px; margin: auto;"
+          placeholder="Número máximo de votos" value="{{ .MaxVotes }}"
+          onchange="location.href='/admin-controls?action=set_max_votes&value=' + this.value">
+          </div>
+          <div class="control">
+            <button class="button is-info">
+              Maximo de votos por sessão (total de pares)
+            </button>
+          </div>
+        </div>
+
+        <div class="field has-addons">
+        <div class="control">
+          <input type="number" min="1" max="3600" class="input" style="width: 150px; margin: auto;"
+        placeholder="Intervalo do código (s)" value="{{ .CodeInterval }}"
+        onchange="location.href='/admin-controls?action=code_time&value=' + this.value">
+        </div>
+        <div class="control">
+          <button class="button is-info">
+            tempo de intervalo do código (segundos)
+          </button>
+        </div>
+      </div>
+      
+
+      
+    </div>
     <div class="container mt-6">
       <div class="level">
         <div class="level-left">
-          <h2 class="subtitle">Cosplays cadastrados</h2>
+          <h2 class="subtitle">
+            {{ len .Cosplays }}
+            Cosplays cadastrados</h2>
         </div>
         <div class="level-right">
           <button class="button is-primary" id="addCosplayBtn" x-on:click="cosplayModalOpen = true">
@@ -61,12 +93,12 @@
               </div>
             </div>
             <footer class="card-footer">
-              <button class="card-footer-item button is-danger is-light" 
-                hx-post="/admin/delete-cosplay?id={{ .ID }}" hx-target="closest .column" hx-swap="outerHTML">
+              <button class="card-footer-item button is-danger is-light" hx-post="/admin/delete-cosplay?id={{ .ID }}"
+                hx-target="closest .column" hx-swap="outerHTML">
                 Excluir
               </button>
-              <button class="card-footer-item button is-info is-light" 
-                hx-get="/admin/edit-cosplay?id={{ .ID }}" hx-target="#cosplayModalContent" hx-swap="innerHTML" onclick="openCosplayModal()">
+              <button class="card-footer-item button is-info is-light" hx-get="/admin/edit-cosplay?id={{ .ID }}"
+                hx-target="#cosplayModalContent" hx-swap="innerHTML" onclick="openCosplayModal()">
                 Editar
               </button>
             </footer>
@@ -85,27 +117,28 @@
           <button class="delete" aria-label="close" x-on:click="cosplayModalOpen = false"></button>
         </header>
         <section class="modal-card-body" id="cosplayModalContent">
-         {{template "component_cosplay_form.html" .}}
+          {{template "component_cosplay_form.html" .}}
         </section>
       </div>
     </div>
   </section>
   <script>
-        function cosplayForm() {
-            return {
-                imagePreview: null,
-                previewImage(event) {
-                    const file = event.target.files[0];
-                    if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            this.imagePreview = e.target.result;
-                        };
-                        reader.readAsDataURL(file);
-                    }
-                }
-            }
+    function cosplayForm() {
+      return {
+        imagePreview: null,
+        previewImage(event) {
+          const file = event.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              this.imagePreview = e.target.result;
+            };
+            reader.readAsDataURL(file);
+          }
         }
-    </script>
+      }
+    }
+  </script>
 </body>
+
 </html>

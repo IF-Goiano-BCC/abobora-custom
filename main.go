@@ -19,7 +19,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/skip2/go-qrcode"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -27,9 +26,10 @@ import (
 // db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 const (
-	addr     = ":8080"
-	interval = 5 // seconds
+	addr = ":8080"
 )
+
+var interval = 10 // seconds
 
 const expiry = time.Duration(24) * time.Hour
 
@@ -313,15 +313,20 @@ func adminPanel(w http.ResponseWriter, r *http.Request) {
 	}
 	// structo cosplays, allowcode and allowvotes
 	data := struct {
-		Cosplays   []Cosplay
-		Allowcode  bool
-		Allowvotes bool
-		Created    bool
+		Cosplays     []Cosplay
+		Allowcode    bool
+		Allowvotes   bool
+		Created      bool
+		MaxVotes     int
+		CodeInterval int
 	}{
-		Cosplays:   cosplays,
-		Allowcode:  allowNewSessions,
-		Allowvotes: allowVotes,
-		Created:    false}
+		Cosplays:     cosplays,
+		Allowcode:    allowNewSessions,
+		Allowvotes:   allowVotes,
+		Created:      false,
+		MaxVotes:     max_votes_per_session,
+		CodeInterval: interval,
+	}
 
 	err = tmpl.ExecuteTemplate(w, "admin.html", data)
 	if err != nil {
@@ -355,6 +360,16 @@ func AdminControlsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		max_votes_per_session = maxVotes
 		log.Println("Max votes per session set to:", max_votes_per_session)
+	case "code_time":
+		intervalStr := r.URL.Query().Get("value")
+		var newInterval int
+		_, err := fmt.Sscanf(intervalStr, "%d", &newInterval)
+		if err != nil || newInterval < 1 {
+			http.Error(w, "Invalid interval value", http.StatusBadRequest)
+			return
+		}
+		log.Println("Code interval changed from", interval, "to", newInterval)
+		interval = newInterval
 	default:
 		http.Error(w, "Invalid action", http.StatusBadRequest)
 		return
@@ -381,8 +396,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	defer c.Close()
 
 	clients[c] = true
-	url := fmt.Sprintf("http://%s/", r.Host)
-	sendCurrentCode(c, url)
+	sendCurrentCode(c)
 
 	for {
 		_, _, err := c.ReadMessage()
@@ -394,16 +408,10 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sendCurrentCode(c *websocket.Conn, url string) {
-	voteURL := fmt.Sprintf("%svote?code=%s", url, currentCode)
-	png, err := qrcode.Encode(voteURL, qrcode.Medium, 256)
-	if err != nil {
-		log.Println("QR encode error:", err)
-		return
-	}
-	msg := fmt.Sprintf(`{"qr":"data:image/png;base64,%s","code":"%s"}`,
-		encodeBase64(png), currentCode)
-	err = c.WriteMessage(websocket.TextMessage, []byte(msg))
+func sendCurrentCode(c *websocket.Conn) {
+
+	msg := fmt.Sprintf(`{"code":"%s"}`, currentCode)
+	err := c.WriteMessage(websocket.TextMessage, []byte(msg))
 	if err != nil {
 		log.Println("WebSocket write error:", err)
 		return
@@ -585,7 +593,7 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 
 	// process vote options
 	w.Header().Set("Content-Type", "text/html")
-	pairs := getRandomCosplayPairs(5)
+	pairs := getRandomCosplayPairs(max_votes_per_session)
 	if len(pairs) == 0 {
 		http.Error(w, "Not enough cosplays to vote", http.StatusInternalServerError)
 		return
@@ -689,14 +697,14 @@ func codeUpdater() {
 	for {
 		currentCode = fmt.Sprintf("%06d", rand.Intn(1000000))
 		broadcastCode()
-		time.Sleep(interval * time.Second)
+		time.Sleep(time.Duration(interval) * time.Second)
 	}
 }
 
 func broadcastCode() {
 	for c := range clients {
-		url := getEnv("APP_DOMAIN", "http://localhost:8080/") // You may want to make this dynamic
-		sendCurrentCode(c, url)
+		// url := getEnv("APP_DOMAIN", "http://localhost:8080/") // You may want to make this dynamic
+		sendCurrentCode(c)
 	}
 }
 

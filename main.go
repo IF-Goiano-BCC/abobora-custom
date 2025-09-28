@@ -14,8 +14,11 @@ import (
 
 	"encoding/json"
 
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -53,6 +56,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
+var client *s3.Client
+
 var MINIO_BUCKET string
 var MINIO_URL string
 
@@ -87,8 +92,6 @@ type Vote struct {
 	Timestamp        time.Time
 }
 
-var minioClient *minio.Client
-
 // var err error
 
 type CosplayWithVotes struct {
@@ -101,9 +104,22 @@ func main() {
 	MINIO_BUCKET = getEnv("MINIO_BUCKET", "cosplay")
 	MINIO_URL = getEnv("MINIO_URL", "localhost:9000/")
 	var err error
-	minioClient, err = minio.New(MINIO_URL, &minio.Options{Creds: credentials.NewStaticV4(getEnv("MINIO_USER", "Miniouser"), getEnv("MINIO_PASSWORD", "Miniopassword"), ""),
-		Secure: false,
+	// var bucketName = MINIO_BUCKET
+	var accountId = getEnv("R2_ACCOUNT_ID", "<account_id>")
+	var accessKeyId = getEnv("R2_ACCESS_KEY_ID", "<access_key_id>")
+	var accessKeySecret = getEnv("R2_SECRET_ACCESS_KEY", "<access_key_secret>")
+	fmt.Println("Using R2 account ID:", accountId)
+	fmt.Print("Using R2 access key ID:", accessKeyId)
+	fmt.Println("Using R2 access key secret:", accessKeySecret)
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyId, accessKeySecret, "")),
+		config.WithRegion("auto"),
+	)
+
+	client = s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountId))
 	})
+
 	if err != nil {
 		log.Fatalln("Error initializing MinIO client:", err)
 	}
@@ -203,10 +219,13 @@ func newCosplayForm(w http.ResponseWriter, r *http.Request) {
 		defer file.Close()
 		// gen randon name to the file
 		// save file to static/uploads/
+		ctx := context.Background()
 		new_file_name := uuid.New().String() + "_" + handler.Filename
-
-		_, err = minioClient.PutObject(context.Background(), MINIO_BUCKET, new_file_name, file, handler.Size, minio.PutObjectOptions{
-			ContentType: "application/octet-stream", // Set appropriate Content-Type
+		uploader := manager.NewUploader(client)
+		_, err = uploader.Upload(ctx, &s3.PutObjectInput{
+			Bucket: aws.String(MINIO_BUCKET),
+			Key:    aws.String(new_file_name),
+			Body:   file,
 		})
 
 		if err != nil {
@@ -236,7 +255,7 @@ func newCosplayForm(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Database connection error", http.StatusInternalServerError)
 			return
 		}
-		ctx := context.Background()
+
 		err = gorm.G[Cosplay](db).Create(ctx, &cosplay)
 		if err != nil {
 			http.Error(w, "Database insert error", http.StatusInternalServerError)
@@ -296,16 +315,20 @@ func adminPanel(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 
 	cosplays, err := gorm.G[Cosplay](db).Find(ctx)
+	presignClient := s3.NewPresignClient(client)
 
 	// map cosplays to change imagePath values to respond
 	for i := range cosplays {
-		presignedURL, err := minioClient.PresignedGetObject(context.Background(), MINIO_BUCKET, cosplays[i].ImagePath, expiry, nil)
+		presignedURL, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(MINIO_BUCKET),
+			Key:    aws.String(cosplays[i].ImagePath),
+		}, s3.WithPresignExpires(expiry))
 		if err != nil {
 			log.Println("Error generating presigned URL:", err)
 			// http.Error(w, "Error generating image URL", http.StatusInternalServerError)
 			return
 		}
-		cosplays[i].ImagePath = presignedURL.String()
+		cosplays[i].ImagePath = presignedURL.URL
 	}
 	if err != nil {
 		http.Error(w, "Database query error", http.StatusInternalServerError)
@@ -457,13 +480,18 @@ func listAllcosplayswithVotes() []CosplayWithVotes {
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].VoteCount > results[j].VoteCount
 	})
+	presignClient := s3.NewPresignClient(client)
+	ctx := context.Background()
 	for i := range results {
-		presignedURL, err := minioClient.PresignedGetObject(context.Background(), MINIO_BUCKET, results[i].ImagePath, expiry, nil)
+		presignedURL, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(MINIO_BUCKET),
+			Key:    aws.String(results[i].ImagePath),
+		}, s3.WithPresignExpires(expiry))
 		if err != nil {
 			log.Println("Error generating presigned URL:", err)
 			// http.Error(w, "Error generating image URL", http.StatusInternalServerError)
 		}
-		results[i].ImagePath = presignedURL.String()
+		results[i].ImagePath = presignedURL.URL
 	}
 
 	return results
@@ -590,6 +618,7 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	ctx := context.Background()
 
 	// process vote options
 	w.Header().Set("Content-Type", "text/html")
@@ -598,15 +627,19 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Not enough cosplays to vote", http.StatusInternalServerError)
 		return
 	}
+	presignClient := s3.NewPresignClient(client)
 
 	// Generate presigned URLs for image paths
 	for i := range pairs {
 		for j := range pairs[i] {
-			presignedURL, err := minioClient.PresignedGetObject(context.Background(), MINIO_BUCKET, pairs[i][j].ImagePath, expiry, nil)
+			presignedURL, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+				Bucket: aws.String(MINIO_BUCKET),
+				Key:    aws.String(pairs[i][j].ImagePath),
+			}, s3.WithPresignExpires(expiry))
 			if err != nil {
 				log.Println("Error generating presigned URL:", err)
 			}
-			pairs[i][j].ImagePath = presignedURL.String()
+			pairs[i][j].ImagePath = presignedURL.URL
 		}
 	}
 

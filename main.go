@@ -108,9 +108,7 @@ func main() {
 	var accountId = getEnv("R2_ACCOUNT_ID", "<account_id>")
 	var accessKeyId = getEnv("R2_ACCESS_KEY_ID", "<access_key_id>")
 	var accessKeySecret = getEnv("R2_SECRET_ACCESS_KEY", "<access_key_secret>")
-	fmt.Println("Using R2 account ID:", accountId)
-	fmt.Print("Using R2 access key ID:", accessKeyId)
-	fmt.Println("Using R2 access key secret:", accessKeySecret)
+
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyId, accessKeySecret, "")),
 		config.WithRegion("auto"),

@@ -67,7 +67,7 @@
                     <span x-text="current"></span> / <span x-text="pairs.length"></span>
                 </p>
                 <p class="subtitle">
-                    Escolha o melhor cosplay!
+                    Escolha o melhor entre os dois cosplays!
                 </p>
                 <button x-show="!initialized" class="button is-primary is-large" x-on:click="initialized = true;">
                     Iniciar Votação
@@ -82,29 +82,29 @@
         <div class="hero-body">
             <div class="container has-text-centered">
                 <p class="title">Votação Finalizada</p>
-                <p class="subtitle">Obriado pela sua participação</p>
+                <p class="subtitle">Obrigado pela sua participação</p>
             </div>
         </div>
     </section>
 
-<section   x-show="!finished && waitingNext" class="hero is-fullheight is-info">
-        <div class="hero-body">
-            <div class="container has-text-centered">
-                <p class="title">
-                    Preparando proximo voto...
-                    <br>
-                    <span x-text="current"></span> / <span x-text="pairs.length"></span>
-                </p>
-                <p class="subtitle">
-                    Escolha o melhor cosplay!
-                </p>
+    <section   x-show="!finished && waitingNext" class="hero is-fullheight is-info">
+            <div class="hero-body">
+                <div class="container has-text-centered">
+                    <p class="title">
+                        Preparando proximo voto...
+                        <br>
+                        <span x-text="current"></span> / <span x-text="pairs.length"></span>
+                    </p>
+                    <p class="subtitle">
+                        Escolha o melhor entre os dois cosplays!
+                    </p>
 
-                <button class="button is-primary is-large">
-                    <span x-text="remaining"></span>
-                </button>
+                    <button class="button is-primary is-large">
+                        <span x-text="remaining"></span>
+                    </button>
+                </div>
             </div>
-        </div>
-    </section>
+        </section>
 
 
     <div x-show="!finished && initialized && !waitingNext" class="container is-fullheight">
@@ -117,9 +117,9 @@
                 
         </header>
         <div class="card">
-            <div x-show="!canVote" class="tag is-danger" style="margin-left: 2vw;">
+            {% comment %} <div x-show="!canVote" class="tag is-danger" style="margin-left: 2vw;">
                     araste para Ver o outro                     
-                </div>
+                </div> {% endcomment %}
             <button class="button is-rounded is-left custom-positioned-button" @click="swap()" @touch="">
                 <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
                     <path d="M20 8L12 16L20 24" stroke="currentColor" stroke-width="3" stroke-linecap="round"
@@ -145,11 +145,11 @@
             </div>
             <footer style="height: 10vh" class="card-footer">
                 <button x-on:click="vote(shown)" :disabled="!canVote"
-                    :class="canVote ? 'card-footer-item button is-success' : 'card-footer-item button is-disabled'">
+                    :class="canVote ? 'card-footer-item button is-success' : 'card-footer-item button is-disabled is-danger'">
                     <span class="icon">
                         <i class="fas fa-thumbs-up"></i>
                     </span>
-                    <span>Votar</span>
+                    <span x-text="votetext">Votar</span>
                 </button>
             </footer>
         </div>
@@ -175,6 +175,9 @@
                 startX: 0, 
                 endX: 0,
                 waitingNext: false,
+                votetext: "Vejo o outro par antes de votar",
+                erros: false,
+                errorMsg: ""
                 interval: null,
                 remaining:  3,
                 initTimer(){
@@ -207,6 +210,7 @@
                         }
                     this.shown = (this.shown + 1) % 2;
                     this.canVote = true;
+                    this.votetext = "Votar neste cosplay";
                 },
                 sendVoteToServer(vote) {
                     const form = new FormData();
@@ -225,6 +229,7 @@
                         console.log('Vote successfully sent:', data);
                     }).catch(error => {
                         console.error('There was a problem with the fetch operation:', error);
+                        this.erros = true;
                         
                     });
                     // Placeholder for sending vote t
@@ -235,6 +240,7 @@
                     const voted = this.pairs[this.current][sel]
                     this.votes[this.current] = sel;
                     this.canVote = false;
+                    this.votetext =  "Vejo o outro par antes de votar"
                     this.waitingNext = true;
                     this.sendVoteToServer(sel);
                     this.initTimer();

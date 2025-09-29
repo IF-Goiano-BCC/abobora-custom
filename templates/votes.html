@@ -56,7 +56,7 @@
 
 <body class="has-background-light" x-data="cosplayVoting"
             @touchstart="startX = $event.touches[0].clientX"
-         @touchend="endX = $event.changedTouches[0].clientX; thochSwap();"
+         @touchend="endX = $event.changedTouches[0].clientX; touchSwap();"
 >
     <section   x-show="!initialized" class="hero is-fullheight is-info">
         <div class="hero-body">
@@ -76,6 +76,8 @@
         </div>
     </section>
 
+    
+
     <section x-show="finished" class="hero is-danger is-fullheight">
         <div class="hero-body">
             <div class="container has-text-centered">
@@ -84,8 +86,28 @@
             </div>
         </div>
     </section>
+    
+<section   x-show="!finished && waitingNext" class="hero is-fullheight is-info">
+        <div class="hero-body">
+            <div class="container has-text-centered">
+                <p class="title">
+                    Preparando proximo voto...
+                    <br>
+                    <span x-text="current"></span> / <span x-text="pairs.length"></span>
+                </p>
+                <p class="subtitle">
+                    Escolha o melhor cosplay!
+                </p>
 
-    <div x-show="!finished && initialized" class="container is-fullheight">
+                <button class="button is-primary is-large">
+                    <span x-text="remaining"></span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+
+    <div x-show="!finished && initialized && waitingNext" class="container is-fullheight">
         <header class="card-header" style="height: 5vh;">
             <p class="card-header-title">
                 Vote no seu cosplay favorito 
@@ -152,7 +174,25 @@
                 finished: false,
                 startX: 0, 
                 endX: 0,
-                thochSwap(){
+                waitingNext: false,
+                interval: null,
+                remaining: 10,
+                initTimer(){
+                this.remaining = 10;
+                this.interval = setInterval(() => {
+                        this.setRemaining();
+                    }, 500);
+                },
+                setRemaining(){
+                    if (this.remaining > 0){
+                        this.remaining -= 1;
+                    } else {
+                        clearInterval(this.interval);
+                        this.waitingNext = false;
+                    }
+                },
+                
+                touchSwap(){
                     if (this.startX - this.endX > 50) {
                         // Swiped left
                         this.swap();
@@ -185,6 +225,7 @@
                         console.log('Vote successfully sent:', data);
                     }).catch(error => {
                         console.error('There was a problem with the fetch operation:', error);
+                        
                     });
                     // Placeholder for sending vote t
                     // o server
@@ -194,6 +235,7 @@
                     const voted = this.pairs[this.current][sel]
                     this.votes[this.current] = sel;
                     this.canVote = false;
+                    this.waitingNext = true;
                     this.sendVoteToServer(sel);
                     if (this.current < this.pairs.length - 1) {
                         this.current++;

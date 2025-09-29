@@ -629,6 +629,8 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 	sessionCookie, err := r.Cookie("session_id")
 	if err != nil || sessionCookie.Value == "" {
 		w.WriteHeader(http.StatusBadRequest)
+		fmt.Printf("err: %v", err)
+		fmt.Printf("err: cookie %v", sessionCookie.Value)
 		tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 			ErrorMessage string
 		}{
@@ -639,6 +641,8 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 	sess, ok := sessions[sessionCookie.Value]
 	if !ok {
 		w.WriteHeader(http.StatusBadRequest)
+		fmt.Printf("sesssions err: %v", err)
+		fmt.Printf("err: cookie %v", sessionCookie.Value)
 		tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 			ErrorMessage string
 		}{

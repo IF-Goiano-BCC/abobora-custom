@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"html/template"
 	"log"
@@ -965,21 +964,15 @@ func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func codeUpdater() {
-	log.Printf("CodeUpdater: Starting code updater goroutine with interval %d seconds", interval)
 
 	for {
-		oldCode := currentCode
 		currentCode = fmt.Sprintf("%06d", rand.Intn(1000000))
-		log.Printf("CodeUpdater: Generated new code: %s (previous: %s)", currentCode, oldCode)
-
 		broadcastCode()
 		time.Sleep(time.Duration(interval) * time.Second)
 	}
 }
 
 func broadcastCode() {
-	log.Printf("BroadcastCode: Broadcasting code %s to %d connected clients", currentCode, len(clients))
-
 	disconnectedClients := 0
 	for c := range clients {
 		msg := fmt.Sprintf(`{"code":"%s", "timeToNext": %d}`, currentCode, interval)
@@ -989,12 +982,4 @@ func broadcastCode() {
 			disconnectedClients++
 		}
 	}
-
-	if disconnectedClients > 0 {
-		log.Printf("BroadcastCode: Failed to send to %d clients (likely disconnected)", disconnectedClients)
-	}
-}
-
-func encodeBase64(data []byte) string {
-	return base64.StdEncoding.EncodeToString(data)
 }

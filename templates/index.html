@@ -27,7 +27,7 @@
 		<p>
 			<a :href="qrLink" x-text="qrLink" target="_blank" style="word-break:break-all;"></a>
 		</p>
-		<p x-show="timerSeg > 0" class="title is-1">Next code in: <span   class="title is-1" x-text="timerSeg"></span> seconds</p>
+		<p  class="title is-1">Next code in: <span   class="title is-1" x-text="timerSeg"></span> seconds</p>
 		<p x-show="timerSeg <= 0">Updating...</p>
 	</div>
 	<script>
@@ -52,6 +52,7 @@
 				ws: null,	
 				setremaining(){
 					this.timerSeg -= 1;
+					
 				},
 				init() {
 					if (window.location.protocol === 'https:') {
@@ -61,17 +62,17 @@
 					}
 					this.ws.onmessage = (e) => {
 						let data = JSON.parse(e.data);
-						this.timeSeg = data.timeToNext;
-						// If there's an existing interval, clear it
+						console.log(data);
 						if (this.invertval) {
 							clearInterval(this.invertval);
+							this.interval = null
 						}
+						this.timerSeg = data.timeToNext;
+						console.log(this.timerSeg, data.timeToNext);
+						// If there's an existing interval, clear it
 						// Start a new interval to update the timer every second
 						this.invertval = setInterval(() => {
 							this.setremaining();
-							if (this.timerSeg <= 0) {
-								clearInterval(this.invertval);
-							}
 						}, 1000);
 						this.code = data.code;
 						this.qrLink = window.location.origin + '/vote?code=' + data.code;

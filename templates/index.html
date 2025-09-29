@@ -48,7 +48,11 @@
 
 				ws: null,
 				init() {
-					this.ws = new WebSocket('ws://' + window.location.host + '/ws');
+					if (window.location.protocol === 'https:') {
+						this.ws = new WebSocket('wss://' + window.location.host + '/ws');
+					} else {
+						this.ws = new WebSocket('ws://' + window.location.host + '/ws');
+					}
 					this.ws.onmessage = (e) => {
 						let data = JSON.parse(e.data);
 						this.qrSrc = data.qr;

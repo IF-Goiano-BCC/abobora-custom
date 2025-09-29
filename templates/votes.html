@@ -176,12 +176,12 @@
                 endX: 0,
                 waitingNext: false,
                 interval: null,
-                remaining: 10,
+                remaining:  3,
                 initTimer(){
-                this.remaining = 10;
+                this.remaining = 3;
                 this.interval = setInterval(() => {
                         this.setRemaining();
-                    }, 500);
+                    }, 750);
                 },
                 setRemaining(){
                     if (this.remaining > 0){

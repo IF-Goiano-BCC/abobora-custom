@@ -928,7 +928,7 @@ func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 
-		if code != currentCode && !allowNewSessions {
+		if code != currentCode || !allowNewSessions {
 			log.Printf("CodeSessionMiddleware: Invalid code or new sessions not allowed. Code: %s, Current: %s, AllowNew: %v", code, currentCode, allowNewSessions)
 			w.Header().Set("Content-Type", "text/html")
 			err := tmpl.ExecuteTemplate(w, "not_allowed.html", nil)

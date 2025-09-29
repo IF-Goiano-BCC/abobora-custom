@@ -941,26 +941,24 @@ func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// Create new session if none exists and code is valid
-		if err != nil || cookie.Value == "" {
-			sessionID = uuid.New().String()
-			log.Printf("CodeSessionMiddleware: Creating new session: %s", sessionID)
+		sessionID = uuid.New().String()
+		log.Printf("CodeSessionMiddleware: Creating new session: %s", sessionID)
 
-			http.SetCookie(w, &http.Cookie{
-				Name:     "session_id",
-				Value:    sessionID,
-				Path:     "/",
-				HttpOnly: true,
-				MaxAge:   3600,
-			})
+		http.SetCookie(w, &http.Cookie{
+			Name:     "session_id",
+			Value:    sessionID,
+			Path:     "/",
+			HttpOnly: true,
+			MaxAge:   3600,
+		})
 
-			r.AddCookie(&http.Cookie{
-				Name:  "session_id",
-				Value: sessionID,
-			})
-			// Default to normal user, you can add logic to set adm type
-			sessions[sessionID] = Session{Type: "normal", votes: 0}
-			log.Printf("CodeSessionMiddleware: New normal session created: %s", sessionID)
-		}
+		r.AddCookie(&http.Cookie{
+			Name:  "session_id",
+			Value: sessionID,
+		})
+		// Default to normal user, you can add logic to set adm type
+		sessions[sessionID] = Session{Type: "normal", votes: 0}
+		log.Printf("CodeSessionMiddleware: New normal session created: %s", sessionID)
 
 		next(w, r)
 	}

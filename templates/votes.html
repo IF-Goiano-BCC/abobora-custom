@@ -86,7 +86,7 @@
             </div>
         </div>
     </section>
-    
+
 <section   x-show="!finished && waitingNext" class="hero is-fullheight is-info">
         <div class="hero-body">
             <div class="container has-text-centered">
@@ -107,7 +107,7 @@
     </section>
 
 
-    <div x-show="!finished && initialized && waitingNext" class="container is-fullheight">
+    <div x-show="!finished && initialized && !waitingNext" class="container is-fullheight">
         <header class="card-header" style="height: 5vh;">
             <p class="card-header-title">
                 Vote no seu cosplay favorito 
@@ -237,6 +237,8 @@
                     this.canVote = false;
                     this.waitingNext = true;
                     this.sendVoteToServer(sel);
+                    this.initTimer();
+                    // Move to next pair after a short delay
                     if (this.current < this.pairs.length - 1) {
                         this.current++;
                         this.shown = 0;

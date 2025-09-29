@@ -616,6 +616,26 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	sessionCookie, err := r.Cookie("session_id")
+	if err != nil || sessionCookie.Value == "" {
+		http.Error(w, "Session cookie missing", http.StatusBadRequest)
+		return
+	}
+	sess, ok := sessions[sessionCookie.Value]
+	if !ok {
+		http.Error(w, "Invalid session", http.StatusBadRequest)
+		return
+	}
+	if sess.votes >= max_votes_per_session {
+		err = tmpl.ExecuteTemplate(w, "generic_error.html", struct {
+			ErrorMessage string
+		}{
+			ErrorMessage: "Voce alcançou o limite de votos",
+		})
+		http.Error(w, "Vote limit reached for this session", http.StatusForbidden)
+		return
+	}
+
 	ctx := context.Background()
 
 	// process vote options
@@ -649,7 +669,7 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		Pairs:   pairs,
 		Current: 0,
 	}
-	err := tmpl.ExecuteTemplate(w, "votes.html", data)
+	err = tmpl.ExecuteTemplate(w, "votes.html", data)
 	if err != nil {
 		http.Error(w, "Template execute error", http.StatusInternalServerError)
 		log.Println("Template execute error:", err)
@@ -662,12 +682,30 @@ func adminSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		cookie, err := r.Cookie("session_id")
 		if err != nil || cookie.Value == "" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			err := tmpl.ExecuteTemplate(w, "generic_error.html", struct {
+				ErrorMessage string
+			}{
+				ErrorMessage: "Sessão não autorizada",
+			})
+			if err != nil {
+				http.Error(w, "Template execute error", http.StatusInternalServerError)
+				log.Println("Template execute error:", err)
+			}
 			return
 		}
 		sessionID := cookie.Value
 		sess, ok := sessions[sessionID]
 		if !ok || sess.Type != "adm" {
 			http.Error(w, "Forbidden", http.StatusForbidden)
+			err := tmpl.ExecuteTemplate(w, "generic_error.html", struct {
+				ErrorMessage string
+			}{
+				ErrorMessage: "Sessão não autorizada",
+			})
+			if err != nil {
+				http.Error(w, "Template execute error", http.StatusInternalServerError)
+				log.Println("Template execute error:", err)
+			}
 			return
 		}
 		next(w, r)
@@ -702,7 +740,7 @@ func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				http.Error(w, "Template execute error", http.StatusInternalServerError)
 				log.Println("Template execute error:", err)
 			}
-			http.Error(w, "Invalid code or session", http.StatusBadRequest)
+			http.Error(w, "Código inválido ou sessão", http.StatusBadRequest)
 			return
 		}
 

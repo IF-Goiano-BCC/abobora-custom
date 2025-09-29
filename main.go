@@ -559,12 +559,17 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		opt2_str := r.FormValue("opt2")
 		sessionCookie, err := r.Cookie("session_id")
 		if err != nil || sessionCookie.Value == "" {
-			http.Error(w, "Session cookie missing", http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
+			tmpl.ExecuteTemplate(w, "generic_error.html", struct {
+				ErrorMessage string
+			}{
+				ErrorMessage: "Sessão inválida",
+			})
 			return
 		}
 		sess, ok := sessions[sessionCookie.Value]
 		if !ok {
-			http.Error(w, "Invalid session", http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
 			tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 				ErrorMessage string
 			}{
@@ -623,12 +628,17 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionCookie, err := r.Cookie("session_id")
 	if err != nil || sessionCookie.Value == "" {
-		http.Error(w, "Session cookie missing", http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		tmpl.ExecuteTemplate(w, "generic_error.html", struct {
+			ErrorMessage string
+		}{
+			ErrorMessage: "Sessão inválida",
+		})
 		return
 	}
 	sess, ok := sessions[sessionCookie.Value]
 	if !ok {
-		http.Error(w, "Invalid session", http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
 		tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 			ErrorMessage string
 		}{
@@ -642,7 +652,8 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		}{
 			ErrorMessage: "Voce alcançou o limite de votos",
 		})
-		http.Error(w, "Vote limit reached for this session", http.StatusForbidden)
+		w.WriteHeader(http.StatusForbidden)
+
 		return
 	}
 
@@ -652,7 +663,12 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	pairs := getRandomCosplayPairs(max_votes_per_session)
 	if len(pairs) == 0 {
-		http.Error(w, "Not enough cosplays to vote", http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		tmpl.ExecuteTemplate(w, "generic_error.html", struct {
+			ErrorMessage string
+		}{
+			ErrorMessage: "Não há cosplays suficientes para votar",
+		})
 		return
 	}
 	presignClient := s3.NewPresignClient(client)
@@ -691,7 +707,7 @@ func adminSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie("session_id")
 		if err != nil || cookie.Value == "" {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			w.WriteHeader(http.StatusUnauthorized)
 			err := tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 				ErrorMessage string
 			}{
@@ -706,7 +722,7 @@ func adminSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		sessionID := cookie.Value
 		sess, ok := sessions[sessionID]
 		if !ok || sess.Type != "adm" {
-			http.Error(w, "Forbidden", http.StatusForbidden)
+			w.WriteHeader(http.StatusForbidden)
 			err := tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 				ErrorMessage string
 			}{
@@ -750,7 +766,8 @@ func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				http.Error(w, "Template execute error", http.StatusInternalServerError)
 				log.Println("Template execute error:", err)
 			}
-			http.Error(w, "Código inválido ou sessão", http.StatusBadRequest)
+			w.WriteHeader(http.StatusBadRequest)
+
 			return
 		}
 

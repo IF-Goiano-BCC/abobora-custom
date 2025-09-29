@@ -952,6 +952,10 @@ func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				HttpOnly: true,
 				MaxAge:   3600,
 			})
+			r.AddCookie(&http.Cookie{
+				Name:  "session_id",
+				Value: sessionID,
+			})
 			// Default to normal user, you can add logic to set adm type
 			sessions[sessionID] = Session{Type: "normal", votes: 0}
 			log.Printf("CodeSessionMiddleware: New normal session created: %s", sessionID)

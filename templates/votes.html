@@ -145,9 +145,6 @@
                     <button x-on:click="vote(shown)" :disabled="!canVote"
                         style="max-height: 9vh;"
                         :class="canVote ? 'button is-success is-large' : 'button is-large is-disabled is-danger'">
-                        <span class="icon">
-                            <i class="fas fa-thumbs-up"></i>
-                        </span>
                         <span x-text="votetext">Votar</span>
                     </button>
                 </div>

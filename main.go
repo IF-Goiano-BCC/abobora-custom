@@ -100,14 +100,20 @@ type CosplayWithVotes struct {
 }
 
 func main() {
+	log.Printf("Main: Starting cosplay voting application")
+
 	// Parse all templatesRat startup
 	MINIO_BUCKET = getEnv("MINIO_BUCKET", "cosplay")
 	MINIO_URL = getEnv("MINIO_URL", "localhost:9000/")
+	log.Printf("Main: Using MinIO bucket: %s, URL: %s", MINIO_BUCKET, MINIO_URL)
+
 	var err error
 	// var bucketName = MINIO_BUCKET
 	var accountId = getEnv("R2_ACCOUNT_ID", "<account_id>")
 	var accessKeyId = getEnv("R2_ACCESS_KEY_ID", "<access_key_id>")
 	var accessKeySecret = getEnv("R2_SECRET_ACCESS_KEY", "<access_key_secret>")
+
+	log.Printf("Main: Configuring AWS S3 client with account ID: %s", accountId)
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyId, accessKeySecret, "")),
@@ -121,6 +127,9 @@ func main() {
 	if err != nil {
 		log.Fatalln("Error initializing MinIO client:", err)
 	}
+
+	log.Printf("Main: S3 client initialized successfully")
+
 	dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC",
 		getEnv("DB_HOST", "localhost"),
 		getEnv("DB_USER", "myuser"),
@@ -128,18 +137,26 @@ func main() {
 		getEnv("DB_NAME", "mydb"),
 		getEnv("DB_PORT", "5432"),
 	)
+
+	log.Printf("Main: Connecting to database at %s:%s", getEnv("DB_HOST", "localhost"), getEnv("DB_PORT", "5432"))
+
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 	if err != nil {
 		panic("failed to connect database")
 	}
 
+	log.Printf("Main: Database connected successfully")
+
 	db.AutoMigrate(&Cosplay{})
 	db.AutoMigrate(&Vote{})
 
-	// Seed random number generator
+	log.Printf("Main: Database migrations completed")
 
+	// Seed random number generator
 	currentCode = fmt.Sprintf("%06d", rand.Intn(1000000))
+	log.Printf("Main: Initial access code generated: %s", currentCode)
+
 	funcMap := template.FuncMap{
 		"json": func(v interface{}) template.JS {
 			b, err := json.Marshal(v)
@@ -151,6 +168,10 @@ func main() {
 	}
 	tmpl = template.New("").Funcs(funcMap)
 	tmpl = template.Must(tmpl.ParseGlob("templates/**.html"))
+
+	log.Printf("Main: Templates loaded successfully")
+
+	log.Printf("Main: Setting up HTTP routes")
 
 	http.HandleFunc("/", adminSessionMiddleware(serveHTML))
 	http.HandleFunc("/ws", wsHandler)
@@ -165,20 +186,31 @@ func main() {
 	fs := http.FileServer(http.Dir("static"))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
+	log.Printf("Main: Starting code updater goroutine")
 	go codeUpdater()
+
+	log.Printf("Main: Server starting on port %s", addr)
+	log.Printf("Main: Configuration - AllowNewSessions: %v, AllowVotes: %v, MaxVotesPerSession: %d, CodeInterval: %ds",
+		allowNewSessions, allowVotes, max_votes_per_session, interval)
 
 	log.Printf("Server running at http://localhost%s", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("LoginHandler: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+
 	w.Header().Set("Content-Type", "text/html")
 	if r.Method == http.MethodPost {
 		// Process login
 		username := r.FormValue("username")
 		password := r.FormValue("password")
+		log.Printf("LoginHandler: Login attempt for username: %s", username)
+
 		if username == getEnv("ADMIN_LOGIN", "admin") && password == getEnv("ADMIN_PASSWORD", "password") {
 			sessionID := uuid.New().String()
+			log.Printf("LoginHandler: Successful login for %s, creating admin session: %s", username, sessionID)
+
 			http.SetCookie(w, &http.Cookie{
 				Name:  "session_id",
 				Value: sessionID,
@@ -186,6 +218,8 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			sessions[sessionID] = Session{Type: "adm", votes: 0}
 			http.Redirect(w, r, "/admin", http.StatusSeeOther)
 			return
+		} else {
+			log.Printf("LoginHandler: Failed login attempt for username: %s", username)
 		}
 	}
 	err := tmpl.ExecuteTemplate(w, "login.html", nil)
@@ -196,10 +230,15 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func newCosplayForm(w http.ResponseWriter, r *http.Request) {
+	log.Printf("NewCosplayForm: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+
 	w.Header().Set("Content-Type", "text/html")
 	if r.Method == http.MethodPost {
+		log.Printf("NewCosplayForm: Processing cosplay form submission")
+
 		err := r.ParseMultipartForm(10 << 20)
 		if err != nil {
+			log.Printf("NewCosplayForm: Error parsing multipart form: %v", err)
 			http.Error(w, "Deu ruim", http.StatusInternalServerError)
 		}
 		// Process form submission
@@ -208,17 +247,25 @@ func newCosplayForm(w http.ResponseWriter, r *http.Request) {
 		email := r.FormValue("email")
 		numero := r.FormValue("numero")
 
+		log.Printf("NewCosplayForm: Creating cosplay - Nome: %s, Desc: %s", nome, desc)
+
 		file, handler, err := r.FormFile("foto")
 		if err != nil {
+			log.Printf("NewCosplayForm: Error retrieving file: %v", err)
 			http.Error(w, "Error retrieving the file", http.StatusInternalServerError)
 			log.Println("Error retrieving the file:", err)
 			return
 		}
 		defer file.Close()
+
+		log.Printf("NewCosplayForm: Processing file upload: %s", handler.Filename)
+
 		// gen randon name to the file
 		// save file to static/uploads/
 		ctx := context.Background()
 		new_file_name := uuid.New().String() + "_" + handler.Filename
+		log.Printf("NewCosplayForm: Uploading file with new name: %s", new_file_name)
+
 		uploader := manager.NewUploader(client)
 		_, err = uploader.Upload(ctx, &s3.PutObjectInput{
 			Bucket: aws.String(MINIO_BUCKET),
@@ -227,10 +274,13 @@ func newCosplayForm(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if err != nil {
+			log.Printf("NewCosplayForm: Error uploading file to S3: %v", err)
 			http.Error(w, "Error saving the file", http.StatusInternalServerError)
 			log.Println("Error saving the file:", err)
 			return
 		}
+
+		log.Printf("NewCosplayForm: File uploaded successfully: %s", new_file_name)
 
 		// TODO: change to Minio or S3
 		// save to db
@@ -250,15 +300,19 @@ func newCosplayForm(w http.ResponseWriter, r *http.Request) {
 
 		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err != nil {
+			log.Printf("NewCosplayForm: Database connection error: %v", err)
 			http.Error(w, "Database connection error", http.StatusInternalServerError)
 			return
 		}
 
 		err = gorm.G[Cosplay](db).Create(ctx, &cosplay)
 		if err != nil {
+			log.Printf("NewCosplayForm: Database insert error: %v", err)
 			http.Error(w, "Database insert error", http.StatusInternalServerError)
 			return
 		}
+
+		log.Printf("NewCosplayForm: Cosplay created successfully with ID: %d", cosplay.ID)
 	}
 
 	var data = struct {
@@ -274,19 +328,26 @@ func newCosplayForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func adminDeleteCosplay(w http.ResponseWriter, r *http.Request) {
+	log.Printf("AdminDeleteCosplay: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+
 	if r.Method != http.MethodPost {
+		log.Printf("AdminDeleteCosplay: Method not allowed: %s", r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	idStr := r.FormValue("id")
+	log.Printf("AdminDeleteCosplay: Attempting to delete cosplay with ID: %s", idStr)
+
 	var id uint
 	_, err := fmt.Sscanf(idStr, "%d", &id)
 	if err != nil {
+		log.Printf("AdminDeleteCosplay: Invalid ID format: %s, error: %v", idStr, err)
 		http.Error(w, "Invalid ID", http.StatusBadRequest)
 		return
 	}
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
+		log.Printf("AdminDeleteCosplay: Database connection error: %v", err)
 		http.Error(w, "Database connection error", http.StatusInternalServerError)
 		return
 	}
@@ -294,18 +355,23 @@ func adminDeleteCosplay(w http.ResponseWriter, r *http.Request) {
 	_, err = gorm.G[Cosplay](db).Where("ID = ?", id).Delete(ctx)
 
 	if err != nil {
+		log.Printf("AdminDeleteCosplay: Database delete error for ID %d: %v", id, err)
 		http.Error(w, "Database delete error", http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("AdminDeleteCosplay: Successfully deleted cosplay with ID: %d", id)
 	fmt.Fprintf(w, `<script>alert("delete")</script>`)
 }
 
 func adminPanel(w http.ResponseWriter, r *http.Request) {
+	log.Printf("AdminPanel: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+
 	w.Header().Set("Content-Type", "text/html")
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 	if err != nil {
+		log.Printf("AdminPanel: Database connection error: %v", err)
 		http.Error(w, "Database connection error", http.StatusInternalServerError)
 		return
 	}
@@ -313,6 +379,14 @@ func adminPanel(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 
 	cosplays, err := gorm.G[Cosplay](db).Find(ctx)
+	if err != nil {
+		log.Printf("AdminPanel: Database query error: %v", err)
+		http.Error(w, "Database query error", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("AdminPanel: Found %d cosplays", len(cosplays))
+
 	presignClient := s3.NewPresignClient(client)
 
 	// map cosplays to change imagePath values to respond
@@ -322,16 +396,13 @@ func adminPanel(w http.ResponseWriter, r *http.Request) {
 			Key:    aws.String(cosplays[i].ImagePath),
 		}, s3.WithPresignExpires(expiry))
 		if err != nil {
-			log.Println("Error generating presigned URL:", err)
+			log.Printf("AdminPanel: Error generating presigned URL for cosplay %d: %v", cosplays[i].ID, err)
 			// http.Error(w, "Error generating image URL", http.StatusInternalServerError)
 			return
 		}
 		cosplays[i].ImagePath = presignedURL.URL
 	}
-	if err != nil {
-		http.Error(w, "Database query error", http.StatusInternalServerError)
-		return
-	}
+
 	// structo cosplays, allowcode and allowvotes
 	data := struct {
 		Cosplays     []Cosplay
@@ -349,6 +420,8 @@ func adminPanel(w http.ResponseWriter, r *http.Request) {
 		CodeInterval: interval,
 	}
 
+	log.Printf("AdminPanel: Rendering admin panel with %d cosplays, AllowCode: %v, AllowVotes: %v", len(cosplays), allowNewSessions, allowVotes)
+
 	err = tmpl.ExecuteTemplate(w, "admin.html", data)
 	if err != nil {
 		http.Error(w, "Template execute error", http.StatusInternalServerError)
@@ -360,38 +433,51 @@ func adminPanel(w http.ResponseWriter, r *http.Request) {
 }
 
 func AdminControlsHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("AdminControlsHandler: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+
 	if r.Method != http.MethodGet {
+		log.Printf("AdminControlsHandler: Method not allowed: %s", r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	action := r.URL.Query().Get("action")
+	log.Printf("AdminControlsHandler: Processing action: %s", action)
 
 	switch action {
 	case "toggle_votes":
+		oldValue := allowVotes
 		allowVotes = !allowVotes
+		log.Printf("AdminControlsHandler: Toggled votes from %v to %v", oldValue, allowVotes)
 	case "toggle_sessions":
+		oldValue := allowNewSessions
 		allowNewSessions = !allowNewSessions
+		log.Printf("AdminControlsHandler: Toggled new sessions from %v to %v", oldValue, allowNewSessions)
 	case "max_votes":
 		maxVotesStr := r.URL.Query().Get("value")
 		var maxVotes int
 		_, err := fmt.Sscanf(maxVotesStr, "%d", &maxVotes)
 		if err != nil || maxVotes < 1 {
+			log.Printf("AdminControlsHandler: Invalid max votes value: %s, error: %v", maxVotesStr, err)
 			http.Error(w, "Invalid max votes value", http.StatusBadRequest)
 			return
 		}
+		oldValue := max_votes_per_session
 		max_votes_per_session = maxVotes
-		log.Println("Max votes per session set to:", max_votes_per_session)
+		log.Printf("AdminControlsHandler: Changed max votes per session from %d to %d", oldValue, max_votes_per_session)
 	case "code_time":
 		intervalStr := r.URL.Query().Get("value")
 		var newInterval int
 		_, err := fmt.Sscanf(intervalStr, "%d", &newInterval)
 		if err != nil || newInterval < 1 {
+			log.Printf("AdminControlsHandler: Invalid interval value: %s, error: %v", intervalStr, err)
 			http.Error(w, "Invalid interval value", http.StatusBadRequest)
 			return
 		}
-		log.Println("Code interval changed from", interval, "to", newInterval)
+		oldInterval := interval
 		interval = newInterval
+		log.Printf("AdminControlsHandler: Changed code interval from %d to %d seconds", oldInterval, interval)
 	default:
+		log.Printf("AdminControlsHandler: Invalid action: %s", action)
 		http.Error(w, "Invalid action", http.StatusBadRequest)
 		return
 	}
@@ -399,6 +485,8 @@ func AdminControlsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveHTML(w http.ResponseWriter, r *http.Request) {
+	log.Printf("ServeHTML: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+
 	w.Header().Set("Content-Type", "text/html")
 	err := tmpl.ExecuteTemplate(w, "index.html", nil)
 	if err != nil {
@@ -408,40 +496,51 @@ func serveHTML(w http.ResponseWriter, r *http.Request) {
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("WSHandler: WebSocket connection request from %s", r.RemoteAddr)
+
 	c, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
-		log.Println("WebSocket upgrade error:", err)
+		log.Printf("WSHandler: WebSocket upgrade error from %s: %v", r.RemoteAddr, err)
 		return
 	}
 	defer c.Close()
 
 	clients[c] = true
+	log.Printf("WSHandler: New WebSocket client connected, total clients: %d", len(clients))
+
 	sendCurrentCode(c)
 
 	for {
 		_, _, err := c.ReadMessage()
 		if err != nil {
+			log.Printf("WSHandler: Client disconnected from %s: %v", r.RemoteAddr, err)
 			delete(clients, c)
 			c.Close()
+			log.Printf("WSHandler: Client removed, total clients: %d", len(clients))
 			break
 		}
 	}
 }
 
 func sendCurrentCode(c *websocket.Conn) {
-
 	msg := fmt.Sprintf(`{"code":"%s"}`, currentCode)
 	err := c.WriteMessage(websocket.TextMessage, []byte(msg))
 	if err != nil {
-		log.Println("WebSocket write error:", err)
+		log.Printf("SendCurrentCode: WebSocket write error: %v", err)
 		return
 	}
+	log.Printf("SendCurrentCode: Sent code %s to client", currentCode)
 }
 
 func CosplayRankHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("CosplayRankHandler: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+
 	w.Header().Set("Content-Type", "text/html")
 	cosplays := listAllcosplayswithVotes()
+
+	log.Printf("CosplayRankHandler: Retrieved %d cosplays with vote counts", len(cosplays))
+
 	data := struct {
 		Cosplays []CosplayWithVotes
 	}{
@@ -449,17 +548,19 @@ func CosplayRankHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	err := tmpl.ExecuteTemplate(w, "rank.html", data)
 	if err != nil {
+		log.Printf("CosplayRankHandler: Template execute error: %v", err)
 		http.Error(w, "Template execute error", http.StatusInternalServerError)
-		log.Println("Template execute error:", err)
 		return
 	}
 }
 
 func listAllcosplayswithVotes() []CosplayWithVotes {
+	log.Printf("ListAllCosplaysWithVotes: Starting to retrieve cosplays with vote counts")
+
 	// list all cosplays with votes count
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Println("Database connection error:", err)
+		log.Printf("ListAllCosplaysWithVotes: Database connection error: %v", err)
 		return []CosplayWithVotes{}
 	}
 	var results []CosplayWithVotes
@@ -469,15 +570,21 @@ func listAllcosplayswithVotes() []CosplayWithVotes {
 		Group("cosplays.id").
 		Scan(&results).Error
 	if err != nil {
-		log.Println("Database query error:", err)
+		log.Printf("ListAllCosplaysWithVotes: Database query error: %v", err)
 		return []CosplayWithVotes{}
 	}
+
+	log.Printf("ListAllCosplaysWithVotes: Found %d cosplays", len(results))
+
 	for _, r := range results {
-		log.Printf("Cosplay: %s, Votes: %d\n", r.Cosplay.Desc, r.VoteCount)
+		log.Printf("ListAllCosplaysWithVotes: Cosplay: %s, Votes: %d", r.Cosplay.Desc, r.VoteCount)
 	}
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].VoteCount > results[j].VoteCount
 	})
+
+	log.Printf("ListAllCosplaysWithVotes: Sorted cosplays by vote count")
+
 	presignClient := s3.NewPresignClient(client)
 	ctx := context.Background()
 	for i := range results {
@@ -486,30 +593,37 @@ func listAllcosplayswithVotes() []CosplayWithVotes {
 			Key:    aws.String(results[i].ImagePath),
 		}, s3.WithPresignExpires(expiry))
 		if err != nil {
-			log.Println("Error generating presigned URL:", err)
+			log.Printf("ListAllCosplaysWithVotes: Error generating presigned URL for cosplay %d: %v", results[i].ID, err)
 			// http.Error(w, "Error generating image URL", http.StatusInternalServerError)
 		}
 		results[i].ImagePath = presignedURL.URL
 	}
 
+	log.Printf("ListAllCosplaysWithVotes: Generated presigned URLs for all cosplays")
 	return results
 }
 
 func getRandomCosplayPairs(npairs int) [][2]CosplayVote {
+	log.Printf("GetRandomCosplayPairs: Generating %d random cosplay pairs", npairs)
+
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Println("Database connection error:", err)
+		log.Printf("GetRandomCosplayPairs: Database connection error: %v", err)
 		return [][2]CosplayVote{}
 	}
 	ctx := context.Background()
 	cosplays, err := gorm.G[Cosplay](db).Find(ctx)
 	if err != nil {
-		log.Println("Database query error:", err)
+		log.Printf("GetRandomCosplayPairs: Database query error: %v", err)
 		return [][2]CosplayVote{}
 	}
 	if len(cosplays) < 2 {
+		log.Printf("GetRandomCosplayPairs: Not enough cosplays for pairing (found %d, need at least 2)", len(cosplays))
 		return [][2]CosplayVote{}
 	}
+
+	log.Printf("GetRandomCosplayPairs: Found %d cosplays total", len(cosplays))
+
 	rand.Shuffle(len(cosplays), func(i, j int) {
 		cosplays[i], cosplays[j] = cosplays[j], cosplays[i]
 	})
@@ -519,6 +633,9 @@ func getRandomCosplayPairs(npairs int) [][2]CosplayVote {
 	} else {
 		maxRepeatedCosplays = (len(cosplays) - 1) / 2
 	}
+
+	log.Printf("GetRandomCosplayPairs: Max repeated cosplays per pair generation: %d", maxRepeatedCosplays)
+
 	pairs := make([][2]CosplayVote, 0, npairs)
 	used := make(map[uint]int) // cosplay ID -> count of times used
 	if npairs > len(cosplays)/2 {
@@ -534,7 +651,7 @@ func getRandomCosplayPairs(npairs int) [][2]CosplayVote {
 					{CosplayID: c.ID, Desc: c.Desc, ImagePath: c.ImagePath},
 					{CosplayID: c2.ID, Desc: c2.Desc, ImagePath: c2.ImagePath},
 				})
-				fmt.Println("Pair:", c.Desc, c2.Desc, c)
+				log.Printf("GetRandomCosplayPairs: Created pair - %s vs %s", c.Desc, c2.Desc)
 
 				used[c.ID] = used[c.ID] + 1
 				used[c2.ID] = used[c2.ID] + 1
@@ -545,20 +662,29 @@ func getRandomCosplayPairs(npairs int) [][2]CosplayVote {
 			break
 		}
 	}
+
+	log.Printf("GetRandomCosplayPairs: Generated %d pairs successfully", len(pairs))
 	return pairs
 
 }
 
 func voteHandler(w http.ResponseWriter, r *http.Request) {
 	// At this point, code and session are validated and session is set in context
+	log.Printf("VoteHandler: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
 
 	if r.Method == http.MethodPost {
+		log.Printf("VoteHandler: Processing vote submission")
+
 		// process vote submission
 		vote_str := r.FormValue("vote")
 		opt1_str := r.FormValue("opt1")
 		opt2_str := r.FormValue("opt2")
+
+		log.Printf("VoteHandler: Vote data - vote: %s, opt1: %s, opt2: %s", vote_str, opt1_str, opt2_str)
+
 		sessionCookie, err := r.Cookie("session_id")
 		if err != nil || sessionCookie.Value == "" {
+			log.Printf("VoteHandler: Invalid session cookie: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 				ErrorMessage string
@@ -569,6 +695,7 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		sess, ok := sessions[sessionCookie.Value]
 		if !ok {
+			log.Printf("VoteHandler: Session not found: %s", sessionCookie.Value)
 			w.WriteHeader(http.StatusBadRequest)
 			tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 				ErrorMessage string
@@ -577,23 +704,30 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+
+		log.Printf("VoteHandler: Session %s has %d votes (max: %d)", sessionCookie.Value, sess.votes, max_votes_per_session)
+
 		if sess.votes >= max_votes_per_session {
+			log.Printf("VoteHandler: Vote limit reached for session %s", sessionCookie.Value)
 			http.Error(w, "Vote limit reached for this session", http.StatusForbidden)
 			return
 		}
 		var vote, opt1, opt2 uint
 		_, err = fmt.Sscanf(vote_str, "%d", &vote)
 		if err != nil {
+			log.Printf("VoteHandler: Invalid vote value: %s, error: %v", vote_str, err)
 			http.Error(w, "Invalid vote value", http.StatusBadRequest)
 			return
 		}
 		_, err = fmt.Sscanf(opt1_str, "%d", &opt1)
 		if err != nil {
+			log.Printf("VoteHandler: Invalid opt1 value: %s, error: %v", opt1_str, err)
 			http.Error(w, "Invalid opt1 value", http.StatusBadRequest)
 			return
 		}
 		_, err = fmt.Sscanf(opt2_str, "%d", &opt2)
 		if err != nil {
+			log.Printf("VoteHandler: Invalid opt2 value: %s, error: %v", opt2_str, err)
 			http.Error(w, "Invalid opt2 value", http.StatusBadRequest)
 			return
 		}
@@ -605,8 +739,13 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 			CosplayVotedId:   uint(vote),
 			Timestamp:        time.Now(),
 		}
+
+		log.Printf("VoteHandler: Creating vote record - Session: %s, Voted: %d, Options: [%d, %d]",
+			VoteCreate.SessionID, VoteCreate.CosplayVotedId, VoteCreate.CosplayOption1Id, VoteCreate.CosplayOption2Id)
+
 		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err != nil {
+			log.Printf("VoteHandler: Database connection error: %v", err)
 			http.Error(w, "Database connection error", http.StatusInternalServerError)
 			return
 		}
@@ -614,9 +753,16 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		ctx := context.Background()
 		err = gorm.G[Vote](db).Create(ctx, &VoteCreate)
 		if err != nil {
+			log.Printf("VoteHandler: Database insert error: %v", err)
 			http.Error(w, "Database insert error", http.StatusInternalServerError)
 			return
 		}
+
+		// Update session vote count
+		sess.votes++
+		sessions[sessionCookie.Value] = sess
+		log.Printf("VoteHandler: Vote recorded successfully, session %s now has %d votes", sessionCookie.Value, sess.votes)
+
 		// return ok js msg
 		fmt.Fprintf(w, `{"status":"ok"}`)
 		return
@@ -626,11 +772,13 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	log.Printf("VoteHandler: Processing vote page request")
+
 	sessionCookie, err := r.Cookie("session_id")
 	if err != nil || sessionCookie.Value == "" {
+		log.Printf("VoteHandler: Invalid session cookie for GET request: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Printf("err: %v", err)
-		fmt.Printf("err: cookie %v", sessionCookie.Value)
 		tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 			ErrorMessage string
 		}{
@@ -640,9 +788,8 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	sess, ok := sessions[sessionCookie.Value]
 	if !ok {
+		log.Printf("VoteHandler: Session not found for GET request: %s", sessionCookie.Value)
 		w.WriteHeader(http.StatusBadRequest)
-		fmt.Printf("sesssions err: %v", err)
-		fmt.Printf("err: cookie %v", sessionCookie.Value)
 		tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 			ErrorMessage string
 		}{
@@ -651,13 +798,13 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sess.votes >= max_votes_per_session {
+		log.Printf("VoteHandler: Vote limit reached for session %s on GET request", sessionCookie.Value)
 		err = tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 			ErrorMessage string
 		}{
 			ErrorMessage: "Voce alcançou o limite de votos",
 		})
 		w.WriteHeader(http.StatusForbidden)
-
 		return
 	}
 
@@ -667,6 +814,7 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	pairs := getRandomCosplayPairs(max_votes_per_session)
 	if len(pairs) == 0 {
+		log.Printf("VoteHandler: No cosplay pairs available")
 		w.WriteHeader(http.StatusInternalServerError)
 		tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 			ErrorMessage string
@@ -675,6 +823,9 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	log.Printf("VoteHandler: Generated %d cosplay pairs for voting", len(pairs))
+
 	presignClient := s3.NewPresignClient(client)
 
 	// Generate presigned URLs for image paths
@@ -685,7 +836,7 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 				Key:    aws.String(pairs[i][j].ImagePath),
 			}, s3.WithPresignExpires(expiry))
 			if err != nil {
-				log.Println("Error generating presigned URL:", err)
+				log.Printf("VoteHandler: Error generating presigned URL for pair %d, option %d: %v", i, j, err)
 			}
 			pairs[i][j].ImagePath = presignedURL.URL
 		}
@@ -699,6 +850,9 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		Pairs:   pairs,
 		Current: 0,
 	}
+
+	log.Printf("VoteHandler: Rendering vote page for session %s", sessionCookie.Value)
+
 	err = tmpl.ExecuteTemplate(w, "votes.html", data)
 	if err != nil {
 		http.Error(w, "Template execute error", http.StatusInternalServerError)
@@ -709,8 +863,11 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 
 func adminSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("AdminSessionMiddleware: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+
 		cookie, err := r.Cookie("session_id")
 		if err != nil || cookie.Value == "" {
+			log.Printf("AdminSessionMiddleware: No session cookie found for %s %s, error: %v", r.Method, r.URL.Path, err)
 			w.WriteHeader(http.StatusUnauthorized)
 			err := tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 				ErrorMessage string
@@ -724,8 +881,11 @@ func adminSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		sessionID := cookie.Value
+		log.Printf("AdminSessionMiddleware: Found session cookie: %s", sessionID)
+
 		sess, ok := sessions[sessionID]
 		if !ok || sess.Type != "adm" {
+			log.Printf("AdminSessionMiddleware: Invalid admin session for %s, session exists: %v, type: %s", sessionID, ok, sess.Type)
 			w.WriteHeader(http.StatusForbidden)
 			err := tmpl.ExecuteTemplate(w, "generic_error.html", struct {
 				ErrorMessage string
@@ -738,6 +898,8 @@ func adminSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 			return
 		}
+
+		log.Printf("AdminSessionMiddleware: Admin access granted for session %s", sessionID)
 		next(w, r)
 	}
 }
@@ -745,25 +907,29 @@ func adminSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 // Middleware for code/session validation
 func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("CodeSessionMiddleware: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
+
 		code := r.URL.Query().Get("code")
 		var sessionID string = ""
 
 		cookie, err := r.Cookie("session_id")
-		fmt.Println("erro", err)
-		fmt.Println("code", cookie)
+		log.Printf("CodeSessionMiddleware: Code provided: %s, Cookie error: %v", code, err)
 
 		if err == nil && cookie.Value != "" {
+			sessionID = cookie.Value
 			sess, ok := sessions[sessionID]
-			fmt.Println("sess", sess)
-			fmt.Println("ok", ok)
+			log.Printf("CodeSessionMiddleware: Found session %s, exists: %v, type: %s, votes: %d", sessionID, ok, sess.Type, sess.votes)
+
 			// Valid session found
 			if ok && (sess.Type == "normal" || sess.Type == "adm") && allowVotes {
+				log.Printf("CodeSessionMiddleware: Valid session found, allowing access")
 				next(w, r)
 				return
 			}
 		}
 
 		if code != currentCode && !allowNewSessions {
+			log.Printf("CodeSessionMiddleware: Invalid code or new sessions not allowed. Code: %s, Current: %s, AllowNew: %v", code, currentCode, allowNewSessions)
 			w.Header().Set("Content-Type", "text/html")
 			err := tmpl.ExecuteTemplate(w, "not_allowed.html", nil)
 			if err != nil {
@@ -771,13 +937,14 @@ func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				log.Println("Template execute error:", err)
 			}
 			w.WriteHeader(http.StatusBadRequest)
-
 			return
 		}
 
 		// Create new session if none exists and code is valid
 		if err != nil || cookie.Value == "" {
 			sessionID = uuid.New().String()
+			log.Printf("CodeSessionMiddleware: Creating new session: %s", sessionID)
+
 			http.SetCookie(w, &http.Cookie{
 				Name:     "session_id",
 				Value:    sessionID,
@@ -787,6 +954,7 @@ func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			})
 			// Default to normal user, you can add logic to set adm type
 			sessions[sessionID] = Session{Type: "normal", votes: 0}
+			log.Printf("CodeSessionMiddleware: New normal session created: %s", sessionID)
 		}
 
 		next(w, r)
@@ -794,17 +962,33 @@ func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func codeUpdater() {
+	log.Printf("CodeUpdater: Starting code updater goroutine with interval %d seconds", interval)
+
 	for {
+		oldCode := currentCode
 		currentCode = fmt.Sprintf("%06d", rand.Intn(1000000))
+		log.Printf("CodeUpdater: Generated new code: %s (previous: %s)", currentCode, oldCode)
+
 		broadcastCode()
 		time.Sleep(time.Duration(interval) * time.Second)
 	}
 }
 
 func broadcastCode() {
+	log.Printf("BroadcastCode: Broadcasting code %s to %d connected clients", currentCode, len(clients))
+
+	disconnectedClients := 0
 	for c := range clients {
-		// url := getEnv("APP_DOMAIN", "http://localhost:8080/") // You may want to make this dynamic
-		sendCurrentCode(c)
+		msg := fmt.Sprintf(`{"code":"%s", "timeToNext": %d}`, currentCode, interval)
+		err := c.WriteMessage(websocket.TextMessage, []byte(msg))
+		if err != nil {
+			log.Printf("BroadcastCode: Failed to send to client: %v", err)
+			disconnectedClients++
+		}
+	}
+
+	if disconnectedClients > 0 {
+		log.Printf("BroadcastCode: Failed to send to %d clients (likely disconnected)", disconnectedClients)
 	}
 }
 

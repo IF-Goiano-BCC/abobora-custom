@@ -565,6 +565,11 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		sess, ok := sessions[sessionCookie.Value]
 		if !ok {
 			http.Error(w, "Invalid session", http.StatusBadRequest)
+			tmpl.ExecuteTemplate(w, "generic_error.html", struct {
+				ErrorMessage string
+			}{
+				ErrorMessage: "Sessão inválida",
+			})
 			return
 		}
 		if sess.votes >= max_votes_per_session {
@@ -624,6 +629,11 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 	sess, ok := sessions[sessionCookie.Value]
 	if !ok {
 		http.Error(w, "Invalid session", http.StatusBadRequest)
+		tmpl.ExecuteTemplate(w, "generic_error.html", struct {
+			ErrorMessage string
+		}{
+			ErrorMessage: "Sessão inválida",
+		})
 		return
 	}
 	if sess.votes >= max_votes_per_session {

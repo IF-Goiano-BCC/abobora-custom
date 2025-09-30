@@ -626,7 +626,7 @@ func getRandomCosplayPairs(npairs int) [][2]CosplayVote {
 	rand.Shuffle(len(cosplays), func(i, j int) {
 		cosplays[i], cosplays[j] = cosplays[j], cosplays[i]
 	})
-	var maxRepeatedCosplays int = 3
+	var maxRepeatedCosplays int = 1
 
 	log.Printf("GetRandomCosplayPairs: Max repeated cosplays per pair generation: %d", maxRepeatedCosplays)
 

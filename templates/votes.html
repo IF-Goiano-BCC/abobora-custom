@@ -177,6 +177,11 @@
                 errorMsg: "",
                 interval: null,
                 remaining:  3,
+                init() {
+                   for (let i = 0; i < this.pairs.length; i++) {
+                        console.log(this.pairs[i][0].id, this.pairs[i][1].id);
+                    }
+                },
                 initTimer(){
                 this.remaining = 3;
                 this.interval = setInterval(() => {

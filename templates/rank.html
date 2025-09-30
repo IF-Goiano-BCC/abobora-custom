@@ -14,9 +14,13 @@
 <body>
   {{ template "component_navbar.html" . }}
 
-    <section class="section">
+    <section class="section" x-data="{ showdata: false }">
         <div class="container">
         <h1 class="title">Ranking de Cosplays</h1>
+            <button class="button is-info" @click="showdata = !showdata">
+                <span x-text="showdata ? 'Esconder dados' : 'Mostrar dados'"></span>
+            </button>
+            <hr>
 
                 <div class="columns is-multiline">
                     {{ range $index, $cosplay := .Cosplays }}
@@ -28,7 +32,7 @@
                                 </figure>
                             </div>
                             <div class="card-content">
-                                <div class="media">
+                                <div class="media" x-show="showdata">
                                     <div class="media-content">
                                         <p class="title is-4">{{ $cosplay.Nome }}</p>
                                         <p class="subtitle is-4">{{ $cosplay.Numero }}</p>
@@ -37,7 +41,7 @@
                                     </div>
                                 </div>
                                 <div class="content">
-                                    {{ $cosplay.Desc }}
+                                     <p class="title is-2">{{ $cosplay.Desc }}</p>
                                 </div>
                             </div>
                             <footer class="card-footer">

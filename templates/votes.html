@@ -6,6 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cosplay Voting</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <script>
+    (function() {
+        var KEY = 'cosplay_sid';
+        var stored = localStorage.getItem(KEY) || sessionStorage.getItem(KEY);
+        if (stored && !document.cookie.split(';').some(function(c){ return c.trim().startsWith('session_id='); })) {
+            document.cookie = 'session_id=' + stored + '; path=/; max-age=3600; SameSite=Lax';
+        }
+    })();
+    </script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
     <style>
@@ -58,7 +67,24 @@
             @touchstart="startX = $event.touches[0].clientX"
          @touchend="endX = $event.changedTouches[0].clientX; touchSwap();"
 >
-    <section   x-show="!initialized" class="hero is-fullheight is-info">
+    <section x-show="!initialized && sessionValid === null" class="hero is-fullheight is-light">
+        <div class="hero-body">
+            <div class="container has-text-centered">
+                <p class="title">Verificando sessão…</p>
+            </div>
+        </div>
+    </section>
+
+    <section x-show="!initialized && sessionValid === false" class="hero is-fullheight is-danger">
+        <div class="hero-body">
+            <div class="container has-text-centered">
+                <p class="title">Sessão expirada</p>
+                <p class="subtitle">Escaneie o QR code novamente para votar.</p>
+            </div>
+        </div>
+    </section>
+
+    <section x-show="!initialized && sessionValid === true" class="hero is-fullheight is-info">
         <div class="hero-body">
             <div class="container has-text-centered">
                 <p class="title">
@@ -69,7 +95,7 @@
                 <p class="subtitle">
                     Escolha o melhor entre os dois cosplays!
                 </p>
-                <button x-show="!initialized" class="button is-primary is-large" x-on:click="initialized = true; preloadImages();">
+                <button class="button is-primary is-large" x-on:click="initialized = true; preloadImages();">
                     Iniciar Votação
                 </button>
             </div>
@@ -159,9 +185,13 @@
 
     <script>
         document.addEventListener('alpine:init', () => {
+            
+
+
             Alpine.data('cosplayVoting', () => ({
                 // Example Nx2 matrix, replace with server data
                 pairs: {{ .Pairs | json }},
+                sessionId: '{{ .SessionID }}',
 
                 current: 0,
                 shown: 0, // 0 or 1
@@ -169,7 +199,7 @@
                 canVote: false,
                 votes: [],
                 finished: false,
-                startX: 0, 
+                startX: 0,
                 endX: 0,
                 waitingNext: false,
                 votetext: "Vejo o outro par antes de votar",
@@ -177,9 +207,24 @@
                 errorMsg: "",
                 interval: null,
                 remaining:  3,
+                sessionValid: null,
                 init() {
-                   for (let i = 0; i < this.pairs.length; i++) {
+                    for (let i = 0; i < this.pairs.length; i++) {
                         console.log(this.pairs[i][0].id, this.pairs[i][1].id);
+                    }
+                    const KEY = 'cosplay_sid';
+                    if (this.sessionId) {
+                        localStorage.setItem(KEY, this.sessionId);
+                        sessionStorage.setItem(KEY, this.sessionId);
+                    }
+                    this.checkSession();
+                },
+                async checkSession() {
+                    try {
+                        const res = await fetch('/check-session');
+                        this.sessionValid = res.ok;
+                    } catch {
+                        this.sessionValid = false;
                     }
                 },
                 initTimer(){
@@ -240,7 +285,7 @@
                     }).catch(error => {
                         console.error('There was a problem with the fetch operation:', error);
                         this.erros = true;
-                        
+                        this.sessionValid = false;
                     });
                     // Placeholder for sending vote t
                     // o server

@@ -181,6 +181,7 @@ func main() {
 	http.HandleFunc("/admin-controls", adminSessionMiddleware(AdminControlsHandler))
 	http.HandleFunc("/admin/rank", adminSessionMiddleware(CosplayRankHandler))
 	http.HandleFunc("/admin/delete-cosplay", adminSessionMiddleware(adminDeleteCosplay))
+	http.HandleFunc("/check-session", checkSessionHandler)
 	// Serve static files from ./static/ at /static/
 	fs := http.FileServer(http.Dir("static"))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
@@ -838,11 +839,13 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 
 	// struct with pairs and current index
 	data := struct {
-		Pairs   [][2]CosplayVote
-		Current int
+		Pairs     [][2]CosplayVote
+		Current   int
+		SessionID string
 	}{
-		Pairs:   pairs,
-		Current: 0,
+		Pairs:     pairs,
+		Current:   0,
+		SessionID: sessionCookie.Value,
 	}
 
 	log.Printf("VoteHandler: Rendering vote page for session %s", sessionCookie.Value)
@@ -956,6 +959,24 @@ func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		next(w, r)
 	}
+}
+
+func checkSessionHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	cookie, err := r.Cookie("session_id")
+	if err != nil || cookie.Value == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, `{"valid":false}`)
+		return
+	}
+	sess, ok := sessions[cookie.Value]
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, `{"valid":false}`)
+		return
+	}
+	remaining := max_votes_per_session - sess.votes
+	fmt.Fprintf(w, `{"valid":true,"votes_remaining":%d}`, remaining)
 }
 
 func codeUpdater() {

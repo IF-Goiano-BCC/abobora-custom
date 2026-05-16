@@ -20,7 +20,7 @@ services:
     environment:
       MINIO_ROOT_USER: Miniouser
       MINIO_ROOT_PASSWORD: Miniopassword
-      MINIO_DEFAULT_BUCKETS: reg-bucket
+      MINIO_DEFAULT_BUCKETS: cosplay
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"

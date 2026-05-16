@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"encoding/json"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -46,6 +47,7 @@ type Session struct {
 }
 
 var sessions = make(map[string]Session) // sessionID -> Session
+var sessionsMu sync.RWMutex
 
 var allowNewSessions bool = true
 var allowVotes bool = true
@@ -98,19 +100,21 @@ type CosplayWithVotes struct {
 	VoteCount int64
 }
 
+var db *gorm.DB
+
 func main() {
 	log.Printf("Main: Starting cosplay voting application")
 
 	// Parse all templatesRat startup
 	MINIO_BUCKET = getEnv("MINIO_BUCKET", "cosplay")
-	MINIO_URL = getEnv("MINIO_URL", "localhost:9000/")
+	MINIO_URL = getEnv("MINIO_URL", "localhost:9000")
 	log.Printf("Main: Using MinIO bucket: %s, URL: %s", MINIO_BUCKET, MINIO_URL)
 
 	var err error
 	// var bucketName = MINIO_BUCKET
-	var accountId = getEnv("R2_ACCOUNT_ID", "<account_id>")
-	var accessKeyId = getEnv("R2_ACCESS_KEY_ID", "<access_key_id>")
-	var accessKeySecret = getEnv("R2_SECRET_ACCESS_KEY", "<access_key_secret>")
+	var accountId = getEnv("R2_ACCOUNT_ID", "Miniouser")
+	var accessKeyId = getEnv("R2_ACCESS_KEY_ID", "Miniouser")
+	var accessKeySecret = getEnv("R2_SECRET_ACCESS_KEY", "Miniopassword")
 
 	log.Printf("Main: Configuring AWS S3 client with account ID: %s", accountId)
 
@@ -119,8 +123,14 @@ func main() {
 		config.WithRegion("auto"),
 	)
 
+	storageBackend := getEnv("STORAGE_BACKEND", "minio")
 	client = s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountId))
+		if storageBackend == "r2" {
+			o.BaseEndpoint = aws.String(fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountId))
+		} else {
+			o.BaseEndpoint = aws.String(fmt.Sprintf("http://%s", MINIO_URL))
+			o.UsePathStyle = true
+		}
 	})
 
 	if err != nil {
@@ -139,7 +149,7 @@ func main() {
 
 	log.Printf("Main: Connecting to database at %s:%s", getEnv("DB_HOST", "localhost"), getEnv("DB_PORT", "5432"))
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 	if err != nil {
 		panic("failed to connect database")
@@ -215,7 +225,9 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 				Name:  "session_id",
 				Value: sessionID,
 			})
+			sessionsMu.Lock()
 			sessions[sessionID] = Session{Type: "adm", votes: 0}
+			sessionsMu.Unlock()
 			http.Redirect(w, r, "/admin", http.StatusSeeOther)
 			return
 		} else {
@@ -298,13 +310,6 @@ func newCosplayForm(w http.ResponseWriter, r *http.Request) {
 
 		//_, err = dst.ReadFrom(file)
 
-		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-		if err != nil {
-			log.Printf("NewCosplayForm: Database connection error: %v", err)
-			http.Error(w, "Database connection error", http.StatusInternalServerError)
-			return
-		}
-
 		err = gorm.G[Cosplay](db).Create(ctx, &cosplay)
 		if err != nil {
 			log.Printf("NewCosplayForm: Database insert error: %v", err)
@@ -345,12 +350,6 @@ func adminDeleteCosplay(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid ID", http.StatusBadRequest)
 		return
 	}
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		log.Printf("AdminDeleteCosplay: Database connection error: %v", err)
-		http.Error(w, "Database connection error", http.StatusInternalServerError)
-		return
-	}
 	ctx := context.Background()
 	_, err = gorm.G[Cosplay](db).Where("ID = ?", id).Delete(ctx)
 
@@ -368,14 +367,6 @@ func adminPanel(w http.ResponseWriter, r *http.Request) {
 	log.Printf("AdminPanel: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
 
 	w.Header().Set("Content-Type", "text/html")
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-
-	if err != nil {
-		log.Printf("AdminPanel: Database connection error: %v", err)
-		http.Error(w, "Database connection error", http.StatusInternalServerError)
-		return
-	}
-
 	ctx := context.Background()
 
 	cosplays, err := gorm.G[Cosplay](db).Find(ctx)
@@ -557,14 +548,8 @@ func CosplayRankHandler(w http.ResponseWriter, r *http.Request) {
 func listAllcosplayswithVotes() []CosplayWithVotes {
 	log.Printf("ListAllCosplaysWithVotes: Starting to retrieve cosplays with vote counts")
 
-	// list all cosplays with votes count
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		log.Printf("ListAllCosplaysWithVotes: Database connection error: %v", err)
-		return []CosplayWithVotes{}
-	}
 	var results []CosplayWithVotes
-	err = db.Model(&Cosplay{}).
+	err := db.Model(&Cosplay{}).
 		Select("cosplays.*, COUNT(votes.id) as vote_count").
 		Joins("LEFT JOIN votes ON votes.cosplay_voted_id = cosplays.id").
 		Group("cosplays.id").
@@ -606,11 +591,6 @@ func listAllcosplayswithVotes() []CosplayWithVotes {
 func getRandomCosplayPairs(npairs int) [][2]CosplayVote {
 	log.Printf("GetRandomCosplayPairs: Generating %d random cosplay pairs", npairs)
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		log.Printf("GetRandomCosplayPairs: Database connection error: %v", err)
-		return [][2]CosplayVote{}
-	}
 	ctx := context.Background()
 	cosplays, err := gorm.G[Cosplay](db).Find(ctx)
 	if err != nil {
@@ -688,7 +668,9 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
+		sessionsMu.RLock()
 		sess, ok := sessions[sessionCookie.Value]
+		sessionsMu.RUnlock()
 		if !ok {
 			log.Printf("VoteHandler: Session not found: %s", sessionCookie.Value)
 			w.WriteHeader(http.StatusBadRequest)
@@ -738,13 +720,6 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("VoteHandler: Creating vote record - Session: %s, Voted: %d, Options: [%d, %d]",
 			VoteCreate.SessionID, VoteCreate.CosplayVotedId, VoteCreate.CosplayOption1Id, VoteCreate.CosplayOption2Id)
 
-		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-		if err != nil {
-			log.Printf("VoteHandler: Database connection error: %v", err)
-			http.Error(w, "Database connection error", http.StatusInternalServerError)
-			return
-		}
-
 		ctx := context.Background()
 		err = gorm.G[Vote](db).Create(ctx, &VoteCreate)
 		if err != nil {
@@ -754,8 +729,10 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Update session vote count
+		sessionsMu.Lock()
 		sess.votes++
 		sessions[sessionCookie.Value] = sess
+		sessionsMu.Unlock()
 		log.Printf("VoteHandler: Vote recorded successfully, session %s now has %d votes", sessionCookie.Value, sess.votes)
 
 		// return ok js msg
@@ -781,7 +758,9 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	sessionsMu.RLock()
 	sess, ok := sessions[sessionCookie.Value]
+	sessionsMu.RUnlock()
 	if !ok {
 		log.Printf("VoteHandler: Session not found for GET request: %s", sessionCookie.Value)
 		w.WriteHeader(http.StatusBadRequest)
@@ -880,7 +859,9 @@ func adminSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		sessionID := cookie.Value
 		log.Printf("AdminSessionMiddleware: Found session cookie: %s", sessionID)
 
+		sessionsMu.RLock()
 		sess, ok := sessions[sessionID]
+		sessionsMu.RUnlock()
 		if !ok || sess.Type != "adm" {
 			log.Printf("AdminSessionMiddleware: Invalid admin session for %s, session exists: %v, type: %s", sessionID, ok, sess.Type)
 			w.WriteHeader(http.StatusForbidden)
@@ -914,7 +895,9 @@ func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		if err == nil && cookie.Value != "" {
 			sessionID = cookie.Value
+			sessionsMu.RLock()
 			sess, ok := sessions[sessionID]
+			sessionsMu.RUnlock()
 			log.Printf("CodeSessionMiddleware: Found session %s, exists: %v, type: %s, votes: %d", sessionID, ok, sess.Type, sess.votes)
 
 			// Valid session found
@@ -954,7 +937,9 @@ func codeSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			Value: sessionID,
 		})
 		// Default to normal user, you can add logic to set adm type
+		sessionsMu.Lock()
 		sessions[sessionID] = Session{Type: "normal", votes: 0}
+		sessionsMu.Unlock()
 		log.Printf("CodeSessionMiddleware: New normal session created: %s", sessionID)
 
 		next(w, r)
@@ -969,7 +954,9 @@ func checkSessionHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"valid":false}`)
 		return
 	}
+	sessionsMu.RLock()
 	sess, ok := sessions[cookie.Value]
+	sessionsMu.RUnlock()
 	if !ok {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprint(w, `{"valid":false}`)

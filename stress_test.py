@@ -163,6 +163,7 @@ async def admin_setup(base: str, n: int) -> bool:
                 print(f"[Admin] Login failed (status {resp.status})")
                 return False
         print(f"[Admin] Logged in. Uploading {n} cosplay(s)…")
+        works = True
 
         for i in range(n):
             r, g, b = random.randint(40, 230), random.randint(40, 230), random.randint(40, 230)
@@ -177,10 +178,11 @@ async def admin_setup(base: str, n: int) -> bool:
                 content_type="image/png",
             )
             async with s.post(f"{base}/new-cosplay", data=form) as resp:
+                works = works and resp.status == 200
                 tag = "OK" if resp.status == 200 else f"FAIL({resp.status})"
                 print(f"[Admin]   Cosplay {i + 1:02}: {tag}")
 
-    return True
+    return works
 
 
 # ---------------------------------------------------------------------------

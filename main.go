@@ -191,6 +191,9 @@ func main() {
 	http.HandleFunc("/admin-controls", adminSessionMiddleware(AdminControlsHandler))
 	http.HandleFunc("/admin/rank", adminSessionMiddleware(CosplayRankHandler))
 	http.HandleFunc("/admin/delete-cosplay", adminSessionMiddleware(adminDeleteCosplay))
+	http.HandleFunc("/admin/participants", jsonAdminMiddleware(adminParticipantsJSON))
+	http.HandleFunc("/admin/upload-votes", jsonAdminMiddleware(adminUploadVotes))
+	http.HandleFunc("/api/login", apiLoginHandler)
 	http.HandleFunc("/check-session", checkSessionHandler)
 	// Serve static files from ./static/ at /static/
 	fs := http.FileServer(http.Dir("static"))
@@ -837,6 +840,75 @@ func voteHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func adminParticipantsJSON(w http.ResponseWriter, r *http.Request) {
+	ctx := context.Background()
+	cosplays, err := gorm.G[Cosplay](db).Find(ctx)
+	if err != nil {
+		http.Error(w, "Database query error", http.StatusInternalServerError)
+		return
+	}
+
+	presignClient := s3.NewPresignClient(client)
+	for i := range cosplays {
+		presigned, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(MINIO_BUCKET),
+			Key:    aws.String(cosplays[i].ImagePath),
+		}, s3.WithPresignExpires(2*time.Hour))
+		if err != nil {
+			log.Printf("AdminParticipantsJSON: Error generating presigned URL for cosplay %d: %v", cosplays[i].ID, err)
+			http.Error(w, "Error generating image URL", http.StatusInternalServerError)
+			return
+		}
+		cosplays[i].ImagePath = presigned.URL
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(cosplays)
+}
+
+func adminUploadVotes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var input []struct {
+		SessionID        string    `json:"session_id"`
+		CosplayOption1Id uint      `json:"cosplay_option1_id"`
+		CosplayOption2Id uint      `json:"cosplay_option2_id"`
+		CosplayVotedId   uint      `json:"cosplay_voted_id"`
+		Timestamp        time.Time `json:"timestamp"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	now := time.Now()
+	ctx := context.Background()
+	for _, v := range input {
+		ts := v.Timestamp
+		if ts.IsZero() {
+			ts = now
+		}
+		vote := Vote{
+			SessionID:        v.SessionID,
+			CosplayOption1Id: v.CosplayOption1Id,
+			CosplayOption2Id: v.CosplayOption2Id,
+			CosplayVotedId:   v.CosplayVotedId,
+			Timestamp:        ts,
+		}
+		if err := gorm.G[Vote](db).Create(ctx, &vote); err != nil {
+			log.Printf("AdminUploadVotes: Database insert error: %v", err)
+			http.Error(w, "Database insert error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"status":"ok","count":%d}`, len(input))
+}
+
 func adminSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("AdminSessionMiddleware: %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
@@ -984,5 +1056,72 @@ func broadcastCode() {
 			log.Printf("BroadcastCode: Failed to send to client: %v", err)
 			disconnectedClients++
 		}
+	}
+}
+
+func apiLoginHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		fmt.Fprint(w, `{"error":"method not allowed"}`)
+		return
+	}
+	var creds struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"error":"invalid JSON body"}`)
+		return
+	}
+	if creds.Username != getEnv("ADMIN_LOGIN", "admin") || creds.Password != getEnv("ADMIN_PASSWORD", "password") {
+		log.Printf("ApiLoginHandler: Failed login for username: %s", creds.Username)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, `{"error":"invalid credentials"}`)
+		return
+	}
+	sessionID := uuid.New().String()
+	sessionsMu.Lock()
+	sessions[sessionID] = Session{Type: "adm", votes: 0}
+	sessionsMu.Unlock()
+	log.Printf("ApiLoginHandler: Admin session created: %s", sessionID)
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"session_id":"%s"}`, sessionID)
+}
+
+// jsonAdminMiddleware checks for an admin session via cookie or Authorization: Bearer <session_id> header.
+// On failure it returns JSON errors instead of HTML, making it suitable for API clients.
+func jsonAdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var sessionID string
+
+		// Prefer Authorization header so API clients don't need cookies.
+		if auth := r.Header.Get("Authorization"); len(auth) > 7 && auth[:7] == "Bearer " {
+			sessionID = auth[7:]
+		} else if cookie, err := r.Cookie("session_id"); err == nil && cookie.Value != "" {
+			sessionID = cookie.Value
+		}
+
+		if sessionID == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"error":"missing session"}`)
+			return
+		}
+
+		sessionsMu.RLock()
+		sess, ok := sessions[sessionID]
+		sessionsMu.RUnlock()
+		if !ok || sess.Type != "adm" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"error":"forbidden"}`)
+			return
+		}
+
+		next(w, r)
 	}
 }

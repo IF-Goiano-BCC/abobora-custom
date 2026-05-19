@@ -14,7 +14,7 @@
 
 <body>
   {{ template "component_navbar.html" . }}
-  <section class="section" x-data="{ cosplayModalOpen: false }">
+  <section class="section" x-data="{ cosplayModalOpen: false, clearVotesModalOpen: false, clearPassword: '', clearError: '' }">
     <div class="container has-text-centered">
       <h1 class="title">Painel de Administração</h1>
       <div class="buttons is-centered">
@@ -28,6 +28,9 @@
           {{ if .Allowcode }}Desativar{{ else }}Ativar{{ end }}
           Código
         </a>
+        <button class="button is-danger" x-on:click="clearVotesModalOpen = true; clearPassword = ''; clearError = ''">
+          Limpar todos os votos
+        </button>
       </div>
 
     </div>
@@ -105,6 +108,36 @@
           </div>
         </div>
         {{ end }}
+      </div>
+    </div>
+
+    <!-- Modal for clearing all votes -->
+    <div class="modal" x-bind:class="{ 'is-active': clearVotesModalOpen }">
+      <div class="modal-background" x-on:click="clearVotesModalOpen = false"></div>
+      <div class="modal-card">
+        <header class="modal-card-head">
+          <p class="modal-card-title has-text-danger">Limpar todos os votos</p>
+          <button class="delete" aria-label="close" x-on:click="clearVotesModalOpen = false"></button>
+        </header>
+        <section class="modal-card-body">
+          <p class="mb-4">Esta ação é <strong>irreversível</strong>. Todos os votos serão apagados permanentemente.</p>
+          <p class="mb-3">Digite a senha de administrador para confirmar:</p>
+          <form method="POST" action="/admin/clear-votes">
+            <div class="field">
+              <div class="control">
+                <input class="input" type="password" name="password" x-model="clearPassword" placeholder="Senha" required autocomplete="current-password">
+              </div>
+            </div>
+            <div class="field is-grouped is-grouped-right">
+              <div class="control">
+                <button type="button" class="button" x-on:click="clearVotesModalOpen = false">Cancelar</button>
+              </div>
+              <div class="control">
+                <button type="submit" class="button is-danger">Confirmar e Limpar</button>
+              </div>
+            </div>
+          </form>
+        </section>
       </div>
     </div>
 

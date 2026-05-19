@@ -193,6 +193,7 @@ func main() {
 	http.HandleFunc("/admin/delete-cosplay", adminSessionMiddleware(adminDeleteCosplay))
 	http.HandleFunc("/admin/participants", jsonAdminMiddleware(adminParticipantsJSON))
 	http.HandleFunc("/admin/upload-votes", jsonAdminMiddleware(adminUploadVotes))
+	http.HandleFunc("/admin/clear-votes", adminSessionMiddleware(adminClearVotesHandler))
 	http.HandleFunc("/api/login", apiLoginHandler)
 	http.HandleFunc("/check-session", checkSessionHandler)
 	// Serve static files from ./static/ at /static/
@@ -907,6 +908,28 @@ func adminUploadVotes(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(w, `{"status":"ok","count":%d}`, len(input))
+}
+
+func adminClearVotesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	password := r.FormValue("password")
+	if password != getEnv("ADMIN_PASSWORD", "password") {
+		w.WriteHeader(http.StatusForbidden)
+		tmpl.ExecuteTemplate(w, "generic_error.html", struct{ ErrorMessage string }{"Senha incorreta"})
+		return
+	}
+	ctx := context.Background()
+	_, err := gorm.G[Vote](db).Where("id > ?", 0).Delete(ctx)
+	if err != nil {
+		log.Printf("AdminClearVotes: Database delete error: %v", err)
+		http.Error(w, "Database delete error", http.StatusInternalServerError)
+		return
+	}
+	log.Printf("AdminClearVotes: All votes cleared")
+	http.Redirect(w, r, "/admin", http.StatusSeeOther)
 }
 
 func adminSessionMiddleware(next http.HandlerFunc) http.HandlerFunc {

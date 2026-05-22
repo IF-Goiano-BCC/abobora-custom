@@ -1,67 +1,670 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Painel Admin</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.7/dist/htmx.min.js"></script>
+  <title>RANKING · CLICKVOTO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&family=VT323&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/mask@3.x.x/dist/cdn.min.js"></script>
   <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    :root {
+      --bg-void:       #0a0612;
+      --bg-surface:    #15102a;
+      --bg-elevated:   #221842;
+      --bg-line:       #3a2a6e;
+      --click:         #b8ff00;
+      --click-dim:     #6fa800;
+      --click-press:   #e1ff5c;
+      --click-shadow:  #3a5200;
+      --cyan:          #00e5ff;
+      --cyan-dim:      #008aa0;
+      --magenta:       #ff2d95;
+      --magenta-dim:   #a01a5c;
+      --violet:        #8a4dff;
+      --orange:        #ff8a00;
+      --ok:            #39ff8a;
+      --ok-bg:         #0e2a18;
+      --err:           #ff3355;
+      --warn:          #ffb020;
+      --txt-hi:        #f5f7fa;
+      --txt-mid:       #a6a3c9;
+      --txt-lo:        #6a6390;
+      --txt-dim:       #3a3560;
+      --gold:          #ffd700;
+      --gold-dim:      #b89600;
+      --silver:        #c0c0c0;
+      --silver-dim:    #808080;
+      --bronze:        #cd7f32;
+      --bronze-dim:    #7a4a1a;
+      --display: "Press Start 2P", monospace;
+      --ui: "Silkscreen", "Press Start 2P", monospace;
+      --body: "VT323", monospace;
+      --mono: "JetBrains Mono", monospace;
+    }
 
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--bg-void);
+      color: var(--txt-hi);
+      font-family: var(--body);
+      font-size: 20px;
+      line-height: 1.3;
+      -webkit-font-smoothing: none;
+      font-smooth: never;
+      image-rendering: pixelated;
+    }
+
+    body {
+      background:
+        radial-gradient(circle at 0 0, rgba(255,45,149,.18) 1px, transparent 1.5px) 0 0/8px 8px,
+        radial-gradient(circle at 0 0, rgba(0,229,255,.10) 1px, transparent 1.5px) 4px 4px/8px 8px,
+        var(--bg-void);
+      min-height: 100vh;
+    }
+
+    /* CRT scanlines */
+    body::before {
+      content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+      background: repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 2px, transparent 2px 4px);
+    }
+    /* CRT vignette */
+    body::after {
+      content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 49;
+      background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%);
+    }
+
+    .shell {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* ===== NAVBAR ===== */
+    .px-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      height: 56px;
+      background: var(--bg-surface);
+      border-bottom: 4px solid var(--cyan);
+      box-shadow: 0 4px 0 var(--cyan-dim);
+      position: relative; z-index: 10;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .px-nav .brand {
+      font-family: var(--display);
+      font-size: 14px;
+      color: var(--click);
+      text-shadow: 3px 3px 0 var(--click-shadow);
+      text-decoration: none;
+      letter-spacing: 0;
+    }
+    .px-nav .brand .slash { color: var(--magenta); }
+    .px-nav .brand .voto { color: var(--txt-hi); }
+    .px-nav-links { display: flex; gap: 4px; }
+    .px-nav-links a {
+      font-family: var(--ui);
+      font-size: 11px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--txt-mid);
+      text-decoration: none;
+      padding: 6px 12px;
+      border: 2px solid transparent;
+      transition: all .1s steps(2);
+    }
+    .px-nav-links a:hover {
+      color: var(--cyan);
+      border-color: var(--cyan);
+      background: var(--bg-elevated);
+      box-shadow: 3px 3px 0 var(--cyan-dim);
+    }
+
+    /* ===== PAGE HEADER ===== */
+    .page-header {
+      margin-top: 40px;
+      padding: 40px 36px;
+      background:
+        linear-gradient(rgba(0,229,255,.06) 1px, transparent 1px) 0 0/16px 16px,
+        linear-gradient(90deg, rgba(0,229,255,.06) 1px, transparent 1px) 0 0/16px 16px,
+        linear-gradient(180deg, #1a0f3a 0%, #0a0612 100%);
+      border: 4px solid var(--cyan);
+      box-shadow:
+        8px 8px 0 0 var(--magenta),
+        8px 8px 0 4px var(--bg-void),
+        16px 16px 0 4px var(--click);
+      position: relative;
+      overflow: hidden;
+    }
+    .page-header::after {
+      content: "";
+      position: absolute; inset: 0; pointer-events: none;
+      background:
+        linear-gradient(var(--click), var(--click)) 0 0/16px 4px no-repeat,
+        linear-gradient(var(--click), var(--click)) 0 0/4px 16px no-repeat,
+        linear-gradient(var(--click), var(--click)) 100% 100%/16px 4px no-repeat,
+        linear-gradient(var(--click), var(--click)) 100% 100%/4px 16px no-repeat;
+    }
+    .page-header-inner { position: relative; z-index: 2; }
+    .page-header .live-badge {
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--ui); font-size: 11px; color: var(--txt-mid);
+      letter-spacing: .1em; margin-bottom: 20px;
+    }
+    .dot {
+      width: 12px; height: 12px;
+      background: var(--ok);
+      box-shadow: 4px 0 0 var(--ok), -4px 0 0 var(--ok), 0 4px 0 var(--ok), 0 -4px 0 var(--ok);
+      animation: blink 1s steps(1) infinite;
+      flex-shrink: 0;
+    }
+    @keyframes blink { 50% { opacity: .3; } }
+    .page-header h1 {
+      font-family: var(--display);
+      font-size: clamp(20px, 4vw, 36px);
+      margin: 0 0 12px;
+      color: var(--txt-hi);
+      text-shadow: 4px 4px 0 var(--magenta-dim);
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+    .page-header .subtitle {
+      font-family: var(--body);
+      font-size: 22px;
+      color: var(--txt-mid);
+      margin: 0;
+    }
+
+    /* ===== CONTROLS BAR ===== */
+    .controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-top: 36px;
+      padding: 20px 24px;
+      background: var(--bg-surface);
+      border: 4px solid var(--bg-line);
+      box-shadow: 6px 6px 0 0 var(--bg-elevated);
+    }
+    .controls-bar .group-label {
+      font-family: var(--ui);
+      font-size: 11px;
+      color: var(--txt-lo);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin-right: 4px;
+    }
+    .px-btn {
+      font-family: var(--ui);
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      padding: 10px 18px;
+      border: 4px solid var(--bg-line);
+      background: var(--bg-elevated);
+      color: var(--txt-mid);
+      cursor: pointer;
+      box-shadow: 4px 4px 0 0 var(--txt-dim);
+      transition: all .1s steps(2);
+      position: relative;
+    }
+    .px-btn:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 6px 6px 0 0 var(--txt-dim);
+    }
+    .px-btn:active {
+      transform: translate(2px, 2px);
+      box-shadow: 2px 2px 0 0 var(--txt-dim);
+    }
+    .px-btn.active-cyan {
+      border-color: var(--cyan);
+      color: var(--cyan);
+      background: var(--bg-void);
+      box-shadow: 4px 4px 0 0 var(--cyan-dim);
+    }
+    .px-btn.active-cyan:hover { box-shadow: 6px 6px 0 0 var(--cyan-dim); }
+    .px-btn.active-lime {
+      border-color: var(--click);
+      color: var(--click);
+      background: var(--bg-void);
+      box-shadow: 4px 4px 0 0 var(--click-shadow);
+    }
+    .px-btn.active-lime:hover { box-shadow: 6px 6px 0 0 var(--click-shadow); }
+    .px-btn.active-magenta {
+      border-color: var(--magenta);
+      color: var(--magenta);
+      background: var(--bg-void);
+      box-shadow: 4px 4px 0 0 var(--magenta-dim);
+    }
+    .px-divider { width: 4px; height: 36px; background: var(--bg-line); flex-shrink: 0; }
+    @media (max-width: 600px) { .px-divider { display: none; } }
+
+    /* ===== COUNTER STRIP ===== */
+    .counter-strip {
+      display: flex; gap: 20px; flex-wrap: wrap; margin-top: 24px;
+    }
+    .counter-chip {
+      font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--txt-lo);
+      background: var(--bg-void);
+      border: 2px solid var(--bg-line);
+      padding: 8px 14px;
+      box-shadow: 4px 4px 0 0 var(--bg-line);
+    }
+    .counter-chip b { color: var(--cyan); font-weight: 400; }
+
+    /* ===== TOP-3 PODIUM ===== */
+    .podium-section { margin-top: 40px; }
+    .podium-section .sec-label {
+      font-family: var(--ui); font-size: 12px; color: var(--cyan);
+      letter-spacing: .14em; text-transform: uppercase; margin-bottom: 20px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .podium-section .sec-label::after {
+      content: ""; flex: 1; height: 4px; background: var(--bg-line);
+    }
+
+    .podium-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.15fr 1fr;
+      gap: 16px;
+      align-items: end;
+    }
+    @media (max-width: 700px) {
+      .podium-grid { grid-template-columns: 1fr; align-items: stretch; }
+    }
+
+    .podium-card {
+      background: var(--bg-surface);
+      border: 4px solid var(--bg-line);
+      box-shadow: 6px 6px 0 0 var(--bg-elevated);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      transition: transform .1s steps(2);
+    }
+    .podium-card:hover {
+      transform: translate(-3px, -3px);
+    }
+    .podium-card.rank-1 {
+      border-color: var(--gold);
+      box-shadow: 6px 6px 0 0 var(--gold-dim);
+      order: 2;
+    }
+    .podium-card.rank-2 {
+      border-color: var(--silver);
+      box-shadow: 6px 6px 0 0 var(--silver-dim);
+      order: 1;
+    }
+    .podium-card.rank-3 {
+      border-color: var(--bronze);
+      box-shadow: 6px 6px 0 0 var(--bronze-dim);
+      order: 3;
+    }
+    @media (max-width: 700px) {
+      .podium-card.rank-1 { order: unset; }
+      .podium-card.rank-2 { order: unset; }
+      .podium-card.rank-3 { order: unset; }
+    }
+
+    .podium-medal {
+      position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+      font-family: var(--display); font-size: 13px;
+      padding: 6px 14px;
+      z-index: 3;
+    }
+    .rank-1 .podium-medal {
+      color: var(--bg-void); background: var(--gold);
+      box-shadow: 3px 3px 0 var(--gold-dim);
+    }
+    .rank-2 .podium-medal {
+      color: var(--bg-void); background: var(--silver);
+      box-shadow: 3px 3px 0 var(--silver-dim);
+    }
+    .rank-3 .podium-medal {
+      color: var(--bg-void); background: var(--bronze);
+      box-shadow: 3px 3px 0 var(--bronze-dim);
+    }
+
+    .podium-img {
+      width: 100%; aspect-ratio: 3/4; object-fit: cover;
+      display: block; border-bottom: 4px solid var(--bg-line);
+      image-rendering: auto;
+    }
+
+    .podium-body { padding: 16px 16px 12px; flex: 1; }
+    .podium-rank-num {
+      font-family: var(--display);
+      font-size: 11px; color: var(--txt-lo); margin-bottom: 6px;
+    }
+    .rank-1 .podium-rank-num { color: var(--gold); }
+    .rank-2 .podium-rank-num { color: var(--silver); }
+    .rank-3 .podium-rank-num { color: var(--bronze); }
+
+    .podium-name {
+      font-family: var(--ui); font-weight: 700;
+      font-size: 13px; color: var(--txt-hi);
+      text-transform: uppercase; line-height: 1.2;
+      margin-bottom: 6px; letter-spacing: .06em;
+    }
+    .podium-desc {
+      font-family: var(--body); font-size: 18px; color: var(--txt-mid);
+      line-height: 1.2;
+    }
+
+    .podium-admin-data {
+      padding: 10px 16px;
+      border-top: 2px dashed var(--bg-line);
+      font-family: var(--mono); font-size: 10px;
+      color: var(--txt-lo); line-height: 1.6;
+    }
+    .podium-admin-data span { color: var(--cyan); }
+
+    .podium-votes {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 14px 16px;
+      border-top: 4px solid var(--bg-line);
+      font-family: var(--display); font-size: 16px;
+    }
+    .rank-1 .podium-votes { font-size: 20px; color: var(--gold); border-top-color: var(--gold); }
+    .rank-2 .podium-votes { color: var(--silver); border-top-color: var(--silver); }
+    .rank-3 .podium-votes { color: var(--bronze); border-top-color: var(--bronze); }
+    .votes-label {
+      font-family: var(--ui); font-size: 10px; color: var(--txt-lo);
+      text-transform: uppercase; letter-spacing: .1em;
+    }
+
+    /* ===== ALL PARTICIPANTS GRID ===== */
+    .all-grid {
+      margin-top: 36px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 20px;
+    }
+    @media (max-width: 600px) { .all-grid { grid-template-columns: 1fr 1fr; gap: 12px; } }
+
+    .rank-card {
+      background: var(--bg-surface);
+      border: 4px solid var(--bg-line);
+      box-shadow: 5px 5px 0 0 var(--bg-elevated);
+      position: relative;
+      display: flex; flex-direction: column;
+      transition: transform .1s steps(2), box-shadow .1s steps(2);
+    }
+    .rank-card:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 7px 7px 0 0 var(--cyan-dim);
+      border-color: var(--cyan);
+    }
+    .rank-card.pos-1 { border-color: var(--gold); box-shadow: 5px 5px 0 0 var(--gold-dim); }
+    .rank-card.pos-2 { border-color: var(--silver); box-shadow: 5px 5px 0 0 var(--silver-dim); }
+    .rank-card.pos-3 { border-color: var(--bronze); box-shadow: 5px 5px 0 0 var(--bronze-dim); }
+
+    .rank-badge {
+      position: absolute; top: 8px; left: 8px; z-index: 3;
+      font-family: var(--display); font-size: 10px;
+      padding: 4px 8px;
+      background: var(--bg-elevated);
+      border: 2px solid var(--bg-line);
+      color: var(--txt-mid);
+      box-shadow: 3px 3px 0 var(--txt-dim);
+    }
+    .pos-1 .rank-badge { background: var(--gold); color: var(--bg-void); border-color: var(--gold-dim); box-shadow: 3px 3px 0 var(--gold-dim); }
+    .pos-2 .rank-badge { background: var(--silver); color: var(--bg-void); border-color: var(--silver-dim); box-shadow: 3px 3px 0 var(--silver-dim); }
+    .pos-3 .rank-badge { background: var(--bronze); color: var(--bg-void); border-color: var(--bronze-dim); box-shadow: 3px 3px 0 var(--bronze-dim); }
+
+    .rank-card img {
+      width: 100%; aspect-ratio: 3/4; object-fit: cover;
+      display: block; border-bottom: 4px solid var(--bg-line);
+      image-rendering: auto;
+    }
+    .rank-card .card-body {
+      padding: 14px 14px 10px; flex: 1;
+    }
+    .rank-card .card-name {
+      font-family: var(--ui); font-weight: 700;
+      font-size: 12px; text-transform: uppercase;
+      color: var(--txt-hi); letter-spacing: .05em;
+      line-height: 1.2; margin-bottom: 4px;
+    }
+    .rank-card .card-desc {
+      font-family: var(--body); font-size: 17px; color: var(--txt-mid); line-height: 1.2;
+    }
+    .rank-card .card-admin {
+      padding: 8px 14px;
+      border-top: 2px dashed var(--bg-line);
+      font-family: var(--mono); font-size: 10px;
+      color: var(--txt-lo); line-height: 1.6;
+    }
+    .rank-card .card-admin span { color: var(--cyan); }
+    .rank-card .card-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px;
+      border-top: 4px solid var(--bg-line);
+    }
+    .rank-card .vote-count {
+      font-family: var(--display); font-size: 14px; color: var(--click);
+      text-shadow: 2px 2px 0 var(--click-shadow);
+    }
+    .pos-1 .vote-count { color: var(--gold); text-shadow: 2px 2px 0 var(--gold-dim); }
+    .pos-2 .vote-count { color: var(--silver); text-shadow: 2px 2px 0 var(--silver-dim); }
+    .pos-3 .vote-count { color: var(--bronze); text-shadow: 2px 2px 0 var(--bronze-dim); }
+    .rank-card .vote-label {
+      font-family: var(--ui); font-size: 9px; color: var(--txt-lo);
+      text-transform: uppercase; letter-spacing: .1em;
+    }
+
+    /* ===== EMPTY STATE ===== */
+    .empty-state {
+      margin-top: 40px;
+      padding: 48px 32px;
+      text-align: center;
+      background: var(--bg-surface);
+      border: 4px dashed var(--bg-line);
+    }
+    .empty-state p {
+      font-family: var(--ui); font-size: 14px; color: var(--txt-lo);
+      letter-spacing: .1em; text-transform: uppercase;
+    }
+
+    /* ===== FOOTER ===== */
+    .px-footer {
+      margin-top: 80px; padding-top: 20px;
+      border-top: 4px dashed var(--bg-line);
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+      font-family: var(--ui); font-size: 11px;
+      color: var(--txt-lo); letter-spacing: .12em; text-transform: uppercase;
+    }
+    .heart { color: var(--magenta); animation: blink 1.2s steps(1) infinite; display: inline-block; margin: 0 3px; }
+
+    /* transition helpers */
+    [x-cloak] { display: none !important; }
+  </style>
 </head>
-
 <body>
-  {{ template "component_navbar.html" . }}
 
-    <section class="section" x-data="{ showdata: false }">
-        <div class="container">
-        <h1 class="title">Ranking de Cosplays</h1>
-            <button class="button is-info" @click="showdata = !showdata">
-                <span x-text="showdata ? 'Esconder dados' : 'Mostrar dados'"></span>
-            </button>
-            <hr>
+  <!-- ===== NAVBAR ===== -->
+  <nav class="px-nav">
+    <a class="brand" href="/"><span>CLICK</span><span class="slash">/</span><span class="voto">VOTO</span></a>
+    <div class="px-nav-links">
+      <a href="/">Votação</a>
+      <a href="/admin">Admin</a>
+      <a href="/rank" style="color:var(--click);border-color:var(--click)">Ranking</a>
+    </div>
+  </nav>
 
-                <div class="columns is-multiline">
-                    {{ range $index, $cosplay := .Cosplays }}
-                    <div class="column is-one-quarter">
-                        <div class="card">
-                            <div class="card-image">
-                                <figure class="image is-3by4">
-                                    <img src="{{ $cosplay.ImagePath }}" alt="Imagem do cosplay {{ $cosplay.Nome }}">
-                                </figure>
-                            </div>
-                            <div class="card-content">
-                                <div class="media" x-show="showdata">
-                                    <div class="media-content">
-                                        <p class="title is-4">{{ $cosplay.Nome }}</p>
-                                        <p class="subtitle is-4">{{ $cosplay.Numero }}</p>
-                                        <p class="subtitle is-4">{{ $cosplay.Email }}</p>
-                                    </div>
-                                </div>
-                                <div class="content">
-                                    <p class="subtitle is-6">#{{  $index }}</p>
-                                     <p class="title is-3">{{ $cosplay.Desc }}</p>
-                                </div>
-                            </div>
-                            <footer class="card-footer">
-                                <span class="card-footer-item">
-                                    <span class="icon-text">
-                                        <span class="icon">
-                                            <i class="fas fa-star"></i>
-                                        </span>
-                                        <span>{{ $cosplay.VoteCount }} votos</span>
-                                    </span>
-                                </span>
-                            </footer>
-                        </div>
-                    </div>
-                    {{ else }}
-                    <div class="column">
-                        <div class="notification is-warning">Nenhum cosplay encontrado.</div>
-                    </div>
-                    {{ end }}
-                </div>
+  <div class="shell" x-data="{
+    showdata: false,
+    view: 'top3',
+    get hasTop3() { return document.querySelectorAll('.podium-card').length > 0; }
+  }">
+
+    <!-- ===== PAGE HEADER ===== -->
+    <header class="page-header">
+      <div class="page-header-inner">
+        <div class="live-badge">
+          <span class="dot"></span>
+          <span>RANKING AO VIVO</span>
+          <span style="color:var(--txt-dim)">·</span>
+          <span>COSPLAY 2026</span>
         </div>
+        <h1>Ranking de Cosplays</h1>
+        <p class="subtitle">Placar atualizado em tempo real. Clique em Atualizar para ver os votos mais recentes.</p>
+      </div>
+    </header>
+
+    <!-- ===== CONTROLS ===== -->
+    <div class="controls-bar">
+      <span class="group-label">Exibir</span>
+      <button
+        class="px-btn"
+        :class="view === 'top3' ? 'active-lime' : ''"
+        @click="view = 'top3'">
+        &#9733; Top 3
+      </button>
+      <button
+        class="px-btn"
+        :class="view === 'all' ? 'active-cyan' : ''"
+        @click="view = 'all'">
+        &#9776; Todos
+      </button>
+
+      <div class="px-divider"></div>
+
+      <span class="group-label">Dados</span>
+      <button
+        class="px-btn"
+        :class="showdata ? 'active-magenta' : ''"
+        @click="showdata = !showdata">
+        <span x-text="showdata ? '[ DADOS ON ]' : '[ DADOS OFF ]'"></span>
+      </button>
+
+      <div class="px-divider"></div>
+
+      <button class="px-btn" onclick="location.reload()">&#8635; Atualizar</button>
+    </div>
+
+    <!-- stats strip -->
+    <div class="counter-strip">
+      <div class="counter-chip">Participantes &nbsp;<b>{{ len .Cosplays }}</b></div>
+      {{ if .Cosplays }}
+      <div class="counter-chip">Lider &nbsp;<b>{{ (index .Cosplays 0).Desc }}</b></div>
+      <div class="counter-chip">Votos lider &nbsp;<b>{{ (index .Cosplays 0).VoteCount }}</b></div>
+      {{ end }}
+    </div>
+
+    {{ if .Cosplays }}
+
+    <!-- ===== TOP 3 VIEW ===== -->
+    <div x-show="view === 'top3'" x-cloak>
+      <div class="podium-section">
+        <div class="sec-label">&#9733; Pódio — TOP 3</div>
+        <div class="podium-grid">
+          {{ range $i, $c := .Cosplays }}{{ if lt $i 3 }}
+          <div class="podium-card rank-{{ add $i 1 }}">
+            <div class="podium-medal">
+              {{ if eq $i 0 }}#1{{ else if eq $i 1 }}#2{{ else }}#3{{ end }}
+            </div>
+            <img class="podium-img" src="{{ $c.ImagePath }}" alt="{{ $c.Desc }}">
+            <div class="podium-body">
+              <div class="podium-rank-num">
+                {{ if eq $i 0 }}&#9733; PRIMEIRO LUGAR{{ else if eq $i 1 }}&#9651; SEGUNDO LUGAR{{ else }}&#9654; TERCEIRO LUGAR{{ end }}
+              </div>
+              <div class="podium-name">{{ $c.Desc }}</div>
+              <div class="podium-desc" x-show="showdata">{{ $c.Nome }}</div>
+            </div>
+            <div class="podium-admin-data" x-show="showdata" x-cloak>
+              {{ if $c.Email }}<span>EMAIL</span> {{ $c.Email }}<br>{{ end }}
+              {{ if $c.Numero }}<span>NUM</span> {{ $c.Numero }}<br>{{ end }}
+              <span>ID</span> {{ $c.ID }}
+            </div>
+            <div class="podium-votes">
+              {{ $c.VoteCount }}
+              <span class="votes-label">votos</span>
+            </div>
+          </div>
+          {{ end }}{{ end }}
+        </div>
+      </div>
+
+      <!-- remaining below podium in compact row -->
+      {{ if gt (len .Cosplays) 3 }}
+      <div class="podium-section" style="margin-top:48px">
+        <div class="sec-label">Demais participantes</div>
+        <div class="all-grid">
+          {{ range $i, $c := .Cosplays }}{{ if ge $i 3 }}
+          <div class="rank-card">
+            <div class="rank-badge">#{{ add $i 1 }}</div>
+            <img src="{{ $c.ImagePath }}" alt="{{ $c.Desc }}">
+            <div class="card-body">
+              <div class="card-name">{{ $c.Desc }}</div>
+              <div class="card-desc" x-show="showdata">{{ $c.Nome }}</div>
+            </div>
+            <div class="card-admin" x-show="showdata" x-cloak>
+              {{ if $c.Email }}<span>EMAIL</span> {{ $c.Email }}<br>{{ end }}
+              {{ if $c.Numero }}<span>NUM</span> {{ $c.Numero }}<br>{{ end }}
+            </div>
+            <div class="card-footer">
+              <span class="vote-count">{{ $c.VoteCount }}</span>
+              <span class="vote-label">votos</span>
+            </div>
+          </div>
+          {{ end }}{{ end }}
+        </div>
+      </div>
+      {{ end }}
+    </div>
+
+    <!-- ===== ALL PARTICIPANTS VIEW ===== -->
+    <div x-show="view === 'all'" x-cloak>
+      <div class="podium-section" style="margin-top:36px">
+        <div class="sec-label">Todos os participantes ({{ len .Cosplays }})</div>
+        <div class="all-grid">
+          {{ range $i, $c := .Cosplays }}
+          <div class="rank-card {{ if eq $i 0 }}pos-1{{ else if eq $i 1 }}pos-2{{ else if eq $i 2 }}pos-3{{ end }}">
+            <div class="rank-badge">#{{ add $i 1 }}</div>
+            <img src="{{ $c.ImagePath }}" alt="{{ $c.Desc }}">
+            <div class="card-body">
+              <div class="card-name">{{ $c.Desc }}</div>
+              <div class="card-desc" x-show="showdata">{{ $c.Nome }}</div>
+            </div>
+            <div class="card-admin" x-show="showdata" x-cloak>
+              {{ if $c.Email }}<span>EMAIL</span> {{ $c.Email }}<br>{{ end }}
+              {{ if $c.Numero }}<span>NUM</span> {{ $c.Numero }}<br>{{ end }}
+              <span>ID</span> {{ $c.ID }}
+            </div>
+            <div class="card-footer">
+              <span class="vote-count">{{ $c.VoteCount }}</span>
+              <span class="vote-label">votos</span>
+            </div>
+          </div>
+          {{ end }}
+        </div>
+      </div>
+    </div>
+
+    {{ else }}
+    <div class="empty-state">
+      <p>Nenhum cosplay cadastrado.</p>
+    </div>
+    {{ end }}
+
+    <footer class="px-footer">
+      <span>CLICKVOTO · RANKING · v2.0</span>
+      <span>FEITO COM <span class="heart">&#9829;</span> · 2026</span>
+    </footer>
+
+  </div>
 </body>
 </html>

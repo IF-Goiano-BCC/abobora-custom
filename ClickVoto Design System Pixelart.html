@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ClickVoto · Pixelart Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Silkscreen:wght@400;700&family=VT323&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* ==== Backgrounds — 8-bit palette ==== */
+    --bg-void:        #0a0612;   /* deep arcade purple-black */
+    --bg-surface:     #15102a;   /* card */
+    --bg-elevated:    #221842;   /* modal */
+    --bg-line:        #3a2a6e;   /* divider */
+
+    /* ==== Primary "Click" — pixel lime ==== */
+    --click:          #b8ff00;
+    --click-dim:      #6fa800;
+    --click-press:    #e1ff5c;
+    --click-shadow:   #3a5200;   /* drop shadow for lime */
+
+    /* ==== Secondary accents ==== */
+    --cyan:           #00e5ff;
+    --cyan-dim:       #008aa0;
+    --magenta:        #ff2d95;
+    --magenta-dim:    #a01a5c;
+    --violet:         #8a4dff;
+    --orange:         #ff8a00;
+
+    /* ==== Semantic ==== */
+    --ok:             #39ff8a;
+    --ok-bg:          #0e2a18;
+    --err:            #ff3355;
+    --err-bg:         #2e0a13;
+    --warn:           #ffb020;
+    --warn-bg:        #2e1f0a;
+
+    /* ==== Text ==== */
+    --txt-hi:         #f5f7fa;
+    --txt-mid:        #a6a3c9;
+    --txt-lo:         #6a6390;
+    --txt-dim:        #3a3560;
+
+    /* ==== Pixel scale (4px base, do NOT subpixel) ==== */
+    --px: 4px;
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px;
+
+    /* ==== Type ==== */
+    --display: "Press Start 2P", "VT323", monospace;
+    --ui: "Silkscreen", "Press Start 2P", monospace;
+    --body: "VT323", "Silkscreen", monospace;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  *{box-sizing:border-box}
+  html,body{
+    margin:0;padding:0;background:var(--bg-void);color:var(--txt-hi);
+    font-family:var(--body);font-size:20px;line-height:1.3;
+    -webkit-font-smoothing:none;font-smooth:never;
+    image-rendering:pixelated;
+  }
+  body{
+    background:
+      /* dither dots */
+      radial-gradient(circle at 0 0, rgba(255,45,149,.18) 1px, transparent 1.5px) 0 0/8px 8px,
+      radial-gradient(circle at 0 0, rgba(0,229,255,.10) 1px, transparent 1.5px) 4px 4px/8px 8px,
+      var(--bg-void);
+    min-height:100vh;
+  }
+
+  /* CRT scanlines */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 2px, transparent 2px 4px);
+  }
+  /* CRT vignette */
+  body::after{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:49;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%);
+  }
+
+  /* ===== Layout ===== */
+  .shell{max-width:1240px;margin:0 auto;padding:48px 28px 120px;position:relative;z-index:2}
+  @media (max-width: 720px){ .shell{padding:24px 12px 80px} }
+
+  /* ===== Pixel chunky box: chamfered corners that look like 4px squares cut ===== */
+  .px-box{
+    --pxc: 4px;
+    clip-path: polygon(
+      var(--pxc) 0, calc(100% - var(--pxc)) 0,
+      calc(100% - var(--pxc)) var(--pxc), 100% var(--pxc),
+      100% calc(100% - var(--pxc)),
+      calc(100% - var(--pxc)) calc(100% - var(--pxc)),
+      calc(100% - var(--pxc)) 100%,
+      var(--pxc) 100%,
+      var(--pxc) calc(100% - var(--pxc)),
+      0 calc(100% - var(--pxc)),
+      0 var(--pxc),
+      var(--pxc) var(--pxc)
+    );
+  }
+  /* Pixel border via layered backgrounds — works under clip-path */
+  .px-border{
+    background:
+      linear-gradient(var(--_bd, var(--bg-line)), var(--_bd, var(--bg-line))) top/100% 4px no-repeat,
+      linear-gradient(var(--_bd, var(--bg-line)), var(--_bd, var(--bg-line))) bottom/100% 4px no-repeat,
+      linear-gradient(var(--_bd, var(--bg-line)), var(--_bd, var(--bg-line))) left/4px 100% no-repeat,
+      linear-gradient(var(--_bd, var(--bg-line)), var(--_bd, var(--bg-line))) right/4px 100% no-repeat,
+      var(--_bg, var(--bg-surface));
+  }
+
+  /* ===== Section chrome ===== */
+  .section{margin-top:96px}
+  .section:first-of-type{margin-top:0}
+  .sec-head{display:flex;align-items:baseline;gap:16px;margin-bottom:28px;padding-bottom:18px;
+    border-bottom:4px dashed var(--bg-line)}
+  .sec-num{font-family:var(--ui);font-size:14px;color:var(--cyan);letter-spacing:.16em;
+    background:var(--bg-surface);border:2px solid var(--cyan);padding:4px 8px;
+    box-shadow: 4px 4px 0 0 var(--cyan-dim);
+  }
+  .sec-title{font-family:var(--display);font-weight:400;font-size:22px;margin:0;text-transform:uppercase;
+    color:var(--txt-hi);
+    text-shadow: 4px 4px 0 var(--magenta-dim);
+    line-height:1.1;
+  }
+  .sec-sub{font-family:var(--body);color:var(--txt-mid);font-size:20px;margin-left:auto;max-width:420px;text-align:right;line-height:1.2}
+  @media (max-width:720px){ .sec-sub{display:none} .sec-title{font-size:16px;text-shadow: 3px 3px 0 var(--magenta-dim);} }
+
+  /* ===== Cover ===== */
+  .cover{
+    position:relative;
+    padding:56px 40px;
+    overflow:hidden;
+    background:
+      /* CRT grid */
+      linear-gradient(rgba(0,229,255,.07) 1px, transparent 1px) 0 0/16px 16px,
+      linear-gradient(90deg, rgba(0,229,255,.07) 1px, transparent 1px) 0 0/16px 16px,
+      linear-gradient(180deg, #1a0f3a 0%, #0a0612 100%);
+    border:4px solid var(--cyan);
+    box-shadow:
+      8px 8px 0 0 var(--magenta),
+      8px 8px 0 4px var(--bg-void),
+      16px 16px 0 4px var(--click);
+  }
+  .cover::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:
+      /* corner pixel marks */
+      linear-gradient(var(--click), var(--click)) 0 0/16px 4px no-repeat,
+      linear-gradient(var(--click), var(--click)) 0 0/4px 16px no-repeat,
+      linear-gradient(var(--click), var(--click)) 100% 100%/16px 4px no-repeat,
+      linear-gradient(var(--click), var(--click)) 100% 100%/4px 16px no-repeat;
+  }
+  .cover-inner{position:relative;z-index:2}
+  .badge-line{display:flex;gap:10px;align-items:center;font-family:var(--ui);font-size:11px;color:var(--txt-mid);letter-spacing:.1em;margin-bottom:28px;flex-wrap:wrap}
+  .badge-line .dot{width:12px;height:12px;background:var(--ok);
+    box-shadow: 4px 0 0 var(--ok), -4px 0 0 var(--ok), 0 4px 0 var(--ok), 0 -4px 0 var(--ok);
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink{ 50%{opacity:.3} }
+  .logo{font-family:var(--display);font-weight:400;font-size:clamp(36px, 7vw, 64px);line-height:1.05;letter-spacing:0;margin:0}
+  .logo .click{color:var(--click);text-shadow: 6px 6px 0 var(--click-shadow), 12px 12px 0 var(--bg-void);}
+  .logo .voto{color:var(--txt-hi);text-shadow: 6px 6px 0 #2a1a4a;}
+  .logo .slash{color:var(--magenta);text-shadow: 6px 6px 0 var(--magenta-dim);}
+  .tagline{font-family:var(--body);font-size:24px;color:var(--txt-mid);max-width:640px;margin:24px 0 0;line-height:1.3}
+  .cover-meta{display:flex;flex-wrap:wrap;gap:16px;margin-top:32px;font-family:var(--ui);font-size:11px;color:var(--txt-lo);letter-spacing:.1em;text-transform:uppercase}
+  .cover-meta span{
+    border:2px solid var(--bg-line);background:var(--bg-void);padding:8px 12px;
+    box-shadow: 4px 4px 0 0 var(--bg-line);
+  }
+  .cover-meta span b{color:var(--cyan);font-weight:400}
+
+  /* ===== Color section ===== */
+  .palette-group{margin-top:32px}
+  .palette-group h3{font-family:var(--ui);font-weight:700;text-transform:uppercase;letter-spacing:.1em;font-size:14px;color:var(--cyan);margin:0 0 14px;
+    border-left:8px solid var(--cyan);padding-left:12px;line-height:1.4}
+  .swatch-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px}
+  .swatch{
+    background:var(--bg-surface);
+    border:4px solid var(--bg-line);
+    transition:transform .1s steps(2);
+    cursor:pointer;
+    position:relative;
+    box-shadow: 6px 6px 0 0 var(--bg-elevated);
+  }
+  .swatch:hover{transform:translate(-2px,-2px);box-shadow: 8px 8px 0 0 var(--cyan);border-color:var(--cyan)}
+  .swatch .chip{height:90px;position:relative;border-bottom:4px solid var(--bg-line)}
+  .swatch .chip::before{
+    /* pixel sparkle */
+    content:"";position:absolute;top:8px;left:8px;width:8px;height:8px;background:rgba(255,255,255,.55);
+    box-shadow: 12px 4px 0 -2px rgba(255,255,255,.35);
+  }
+  .swatch .meta{padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+  .swatch .name{font-family:var(--ui);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt-hi)}
+  .swatch .hex{font-family:var(--mono);font-size:11px;color:var(--cyan)}
+  .swatch .role{font-family:var(--body);font-size:16px;color:var(--txt-lo);line-height:1.2;margin-top:2px}
+
+  /* ===== Typography section ===== */
+  .type-block{
+    background:var(--bg-surface);
+    border:4px solid var(--bg-line);
+    box-shadow: 6px 6px 0 0 var(--bg-elevated);
+    padding:24px;margin-bottom:18px;position:relative
+  }
+  .type-block .label{font-family:var(--ui);font-size:11px;color:var(--magenta);letter-spacing:.14em;margin-bottom:12px;
+    display:inline-block;background:var(--bg-void);border:2px solid var(--magenta);padding:4px 8px;text-transform:uppercase}
+  .type-block .specs{font-family:var(--mono);font-size:11px;color:var(--txt-lo);margin-top:14px;display:flex;gap:14px;flex-wrap:wrap;
+    padding-top:12px;border-top:2px dashed var(--bg-line)}
+  .type-block .specs b{color:var(--cyan);font-weight:400}
+  .type-h1{font-family:var(--display);font-weight:400;font-size:28px;line-height:1.15;margin:0;color:var(--txt-hi);text-shadow: 4px 4px 0 var(--magenta-dim)}
+  .type-h2{font-family:var(--display);font-weight:400;font-size:18px;line-height:1.25;margin:0;color:var(--txt-hi)}
+  .type-num{font-family:var(--display);font-weight:400;font-size:44px;line-height:1;margin:0;color:var(--click);
+    text-shadow: 4px 4px 0 var(--click-shadow), 8px 8px 0 var(--bg-void);}
+  .type-body{font-family:var(--body);font-size:22px;line-height:1.3;margin:0;color:var(--txt-hi)}
+  .type-body-mid{font-family:var(--body);font-size:18px;line-height:1.3;margin:0;color:var(--txt-mid)}
+  .type-btn{font-family:var(--ui);font-weight:700;font-size:14px;letter-spacing:.14em;text-transform:uppercase;margin:0;color:var(--click)}
+  .type-cap{font-family:var(--mono);font-weight:500;font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin:0;color:var(--cyan)}
+
+  /* ===== Generic ===== */
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media (max-width:720px){ .grid-2{grid-template-columns:1fr} }
+  .panel{
+    background:var(--bg-surface);
+    border:4px solid var(--bg-line);
+    box-shadow: 6px 6px 0 0 var(--bg-elevated);
+    padding:24px
+  }
+  .panel h4{font-family:var(--ui);font-weight:700;text-transform:uppercase;letter-spacing:.12em;font-size:13px;color:var(--cyan);margin:0 0 12px}
+  .panel p{font-family:var(--body);font-size:20px;color:var(--txt-mid);margin:0;line-height:1.3}
+
+  /* code chip */
+  code.k{font-family:var(--mono);font-size:12px;background:var(--bg-void);color:var(--click);padding:2px 6px;border:2px solid var(--click-dim)}
+
+  /* footer */
+  .foot{margin-top:96px;padding-top:24px;border-top:4px dashed var(--bg-line);display:flex;justify-content:space-between;
+    font-family:var(--ui);font-size:11px;color:var(--txt-lo);letter-spacing:.12em;text-transform:uppercase;flex-wrap:wrap;gap:12px}
+  .foot .heart{color:var(--magenta);
+    box-shadow:none;display:inline-block;margin:0 4px;animation:blink 1.2s steps(1) infinite}
+
+  #root:empty::after{content:"";display:block;height:600px}
+
+  /* utility: pixel heart sprite via box-shadow */
+  .px-sprite{display:inline-block;width:4px;height:4px;background:transparent;color:transparent;vertical-align:middle}
+</style>
+</head>
+<body>
+  <div class="shell">
+
+    <!-- ============ COVER ============ -->
+    <section class="cover">
+      <div class="cover-inner">
+        <div class="badge-line">
+          <span class="dot"></span>
+          <span>SYSTEM v2.0 // PIXEL EDITION</span>
+          <span style="color:var(--txt-dim)">·</span>
+          <span>BR / PT-BR</span>
+          <span style="color:var(--txt-dim)">·</span>
+          <span>16-BIT ARCADE</span>
+        </div>
+        <h1 class="logo"><span class="click">CLICK</span><span class="slash">/</span><span class="voto">VOTO</span></h1>
+        <p class="tagline">Press START to vote. A chunky, 16-bit arcade re-skin of ClickVoto — Press Start 2P type, pixel-perfect borders, hard drop shadows and CRT scanlines. Same neon, zero anti-aliasing.</p>
+        <div class="cover-meta">
+          <span><b>THEME</b> · 8/16-BIT ARCADE</span>
+          <span><b>SURFACE</b> · MOBILE-FIRST</span>
+          <span><b>TYPE</b> · PRESS START 2P · VT323</span>
+          <span><b>CLICK</b> · #B8FF00</span>
+          <span><b>GRID</b> · 4PX</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 01 — COLOR ============ -->
+    <section class="section" id="color">
+      <header class="sec-head">
+        <span class="sec-num">01</span>
+        <h2 class="sec-title">Color Palette</h2>
+        <p class="sec-sub">Limited 16-color arcade palette. Pure hues, no gradients. Every color sits inside a 4px black stroke so pixels never bleed.</p>
+      </header>
+
+      <div class="palette-group">
+        <h3>Background &amp; Surface</h3>
+        <div class="swatch-row" id="sw-bg"></div>
+      </div>
+      <div class="palette-group">
+        <h3>Primary Click — Voting Action</h3>
+        <div class="swatch-row" id="sw-click"></div>
+      </div>
+      <div class="palette-group">
+        <h3>Secondary Accents — Borders, Progress, Active</h3>
+        <div class="swatch-row" id="sw-acc"></div>
+      </div>
+      <div class="palette-group">
+        <h3>Semantic — Vote Status</h3>
+        <div class="swatch-row" id="sw-sem"></div>
+      </div>
+      <div class="palette-group">
+        <h3>Text</h3>
+        <div class="swatch-row" id="sw-txt"></div>
+      </div>
+
+      <div class="grid-2" style="margin-top:32px">
+        <div class="panel">
+          <h4>★ Pixel rules</h4>
+          <p>No gradients. No anti-aliasing. No soft shadows. Every border is 4px solid, every drop shadow is a hard pixel offset (4/4 or 6/6). Use <code class="k">image-rendering:pixelated</code> on art assets.</p>
+        </div>
+        <div class="panel">
+          <h4>★ Contrast &amp; readability</h4>
+          <p>Press Start 2P is dense — never under 11px and always paired with VT323/Silkscreen for body. Neon on <code class="k">--bg-void</code> hits AAA at 14px+.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 02 — TYPOGRAPHY ============ -->
+    <section class="section" id="type">
+      <header class="sec-head">
+        <span class="sec-num">02</span>
+        <h2 class="sec-title">Typography</h2>
+        <p class="sec-sub">Three fixed bitmap families. No weight axis — variation comes from size and color.</p>
+      </header>
+
+      <div class="grid-2">
+        <div class="panel">
+          <h4>Press Start 2P · Display</h4>
+          <p style="font-family:var(--display);font-size:24px;color:var(--txt-hi);margin:14px 0 0;line-height:1.3">AaBb 0123</p>
+          <p style="margin-top:18px;font-size:18px">True 8-bit bitmap face. Reserved for big headers, vote counters, CTA labels. Never under 11px.</p>
+        </div>
+        <div class="panel">
+          <h4>Silkscreen · UI</h4>
+          <p style="font-family:var(--ui);font-weight:700;font-size:24px;color:var(--txt-hi);margin:14px 0 0">AaBb 0123</p>
+          <p style="margin-top:18px;font-size:18px">Compact pixel face for buttons, chips, captions, nav. 11–14px. Reads better than Press Start 2P at small sizes.</p>
+        </div>
+        <div class="panel">
+          <h4>VT323 · Body</h4>
+          <p style="font-family:var(--body);font-size:28px;color:var(--txt-hi);margin:14px 0 0">AaBb 0123</p>
+          <p style="margin-top:18px;font-size:18px">Terminal pixel face. Wide x-height, scales gracefully from 16→28px for body, descriptions, instructions.</p>
+        </div>
+        <div class="panel">
+          <h4>JetBrains Mono · Code</h4>
+          <p style="font-family:var(--mono);font-weight:700;font-size:24px;color:var(--txt-hi);margin:14px 0 0">AaBb 0123</p>
+          <p style="margin-top:18px;font-size:18px">Only used for code chips and developer-facing labels. The one non-bitmap exception — kept tiny.</p>
+        </div>
+      </div>
+
+      <div style="margin-top:20px">
+        <div class="type-block">
+          <div class="label">H1 — APP HEADER</div>
+          <h1 class="type-h1">VOTACAO COSPLAY 2026</h1>
+          <div class="specs"><span><b>Family</b> Press Start 2P</span><span><b>Size</b> 28 / 18 mobile</span><span><b>Shadow</b> 4px magenta</span><span><b>Case</b> UPPER</span></div>
+        </div>
+        <div class="type-block">
+          <div class="label">H2 — CONTESTANT NAME</div>
+          <h2 class="type-h2">MARINA "PHOENIX" CARDOSO</h2>
+          <div class="specs"><span><b>Family</b> Press Start 2P</span><span><b>Size</b> 18 / 14 mobile</span><span><b>Case</b> UPPER</span></div>
+        </div>
+        <div class="type-block">
+          <div class="label">NUMERAL — VOTE COUNTER</div>
+          <p class="type-num">12487</p>
+          <div class="specs"><span><b>Family</b> Press Start 2P</span><span><b>Size</b> 44 / 32 mobile</span><span><b>Shadow</b> double · lime</span><span><b>tabular-nums</b></span></div>
+        </div>
+        <div class="type-block">
+          <div class="label">BODY — DESCRIPTIONS</div>
+          <p class="type-body">Phoenix esta representando a categoria Anime Avancado com uma armadura full-scale construida em 4 meses. Vote e ajude a Marina chegar a final nacional.</p>
+          <div class="specs"><span><b>Family</b> VT323</span><span><b>Size</b> 22</span><span><b>Line</b> 1.3</span><span><b>Case</b> sentence</span></div>
+        </div>
+        <div class="type-block">
+          <div class="label">BODY MID — SECONDARY</div>
+          <p class="type-body-mid">Categoria · Anime · Encerra em 02d 14h 22m</p>
+          <div class="specs"><span><b>Family</b> VT323</span><span><b>Size</b> 18</span><span><b>Color</b> --txt-mid</span></div>
+        </div>
+        <div class="type-block">
+          <div class="label">BUTTON</div>
+          <p class="type-btn">&gt; VOTAR AGORA</p>
+          <div class="specs"><span><b>Family</b> Silkscreen 700</span><span><b>Size</b> 14</span><span><b>Tracking</b> +14%</span><span><b>Case</b> UPPER</span></div>
+        </div>
+        <div class="type-block">
+          <div class="label">CAPTION / META</div>
+          <p class="type-cap">ID-7842 · LIVE · LINK ATIVO</p>
+          <div class="specs"><span><b>Family</b> JetBrains Mono</span><span><b>Size</b> 11</span><span><b>Tracking</b> +14%</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 03 — COMPONENTS (React mounts here) ============ -->
+    <section class="section" id="components">
+      <header class="sec-head">
+        <span class="sec-num">03</span>
+        <h2 class="sec-title">Core UI Components</h2>
+        <p class="sec-sub">Every component is interactive — tap any button to see its press animation, sprite blinks, and confirm flows.</p>
+      </header>
+      <div id="root"></div>
+    </section>
+
+    <footer class="foot">
+      <span>CLICKVOTO · PIXEL DESIGN SYSTEM · v2.0</span>
+      <span>MADE WITH <span class="heart" style="color:var(--magenta)">♥</span> · 2026.05.19</span>
+    </footer>
+  </div>
+
+<script>
+/* ============================================================
+   Render color palette swatches from a single token map
+   ============================================================ */
+const TOKENS = {
+  bg: [
+    {name:"Void Purple",   role:"App background — deep arcade",            hex:"#0A0612"},
+    {name:"Surface",       role:"Cards, sheets, sections",                 hex:"#15102A"},
+    {name:"Elevated",      role:"Modals, raised dialogs",                  hex:"#221842"},
+    {name:"Line",          role:"Borders 4px default",                     hex:"#3A2A6E"},
+  ],
+  click: [
+    {name:"Pixel Lime",    role:"VOTAR · primary action",                  hex:"#B8FF00"},
+    {name:"Lime Shadow",   role:"Drop shadow under lime CTA",              hex:"#3A5200"},
+    {name:"Lime Press",    role:"Pressed / outdoor boost",                 hex:"#E1FF5C"},
+    {name:"Lime Dim",      role:"Disabled fill",                           hex:"#6FA800"},
+  ],
+  acc: [
+    {name:"Arcade Cyan",   role:"Active nav · progress · selected",        hex:"#00E5FF"},
+    {name:"Cyan Shadow",   role:"Drop shadow under cyan",                  hex:"#008AA0"},
+    {name:"Hot Magenta",   role:"Borders · badges · live state",           hex:"#FF2D95"},
+    {name:"Magenta Shadow",role:"Drop shadow under magenta",               hex:"#A01A5C"},
+    {name:"Ultraviolet",   role:"Tertiary accent · category tags",         hex:"#8A4DFF"},
+    {name:"Power Orange",  role:"XP, combos, multipliers",                 hex:"#FF8A00"},
+  ],
+  sem: [
+    {name:"Pixel Success", role:"Voto confirmado",                         hex:"#39FF8A"},
+    {name:"Hot Error",     role:"Voto invalido · bot bloqueado",           hex:"#FF3355"},
+    {name:"Warn Amber",    role:"Aviso · link expirando",                  hex:"#FFB020"},
+  ],
+  txt: [
+    {name:"Text Hi",       role:"Headings · primary text",                 hex:"#F5F7FA"},
+    {name:"Text Mid",      role:"Body secondary · meta",                   hex:"#A6A3C9"},
+    {name:"Text Lo",       role:"Captions · hints",                        hex:"#6A6390"},
+    {name:"Text Dim",      role:"Disabled · placeholder",                  hex:"#3A3560"},
+  ],
+};
+
+function paintSwatches(targetId, list){
+  const host = document.getElementById(targetId);
+  host.innerHTML = list.map(t => `
+    <div class="swatch" data-hex="${t.hex}">
+      <div class="chip" style="background:${t.hex};"></div>
+      <div class="meta">
+        <span class="name">${t.name}</span>
+        <span class="hex">${t.hex.toUpperCase()}</span>
+        <span class="role">${t.role}</span>
+      </div>
+    </div>
+  `).join('');
+}
+paintSwatches('sw-bg',    TOKENS.bg);
+paintSwatches('sw-click', TOKENS.click);
+paintSwatches('sw-acc',   TOKENS.acc);
+paintSwatches('sw-sem',   TOKENS.sem);
+paintSwatches('sw-txt',   TOKENS.txt);
+
+// click-to-copy
+document.body.addEventListener('click', e=>{
+  const s = e.target.closest('.swatch'); if(!s) return;
+  const hex = s.dataset.hex;
+  navigator.clipboard?.writeText(hex);
+  const tag = s.querySelector('.hex');
+  const orig = tag.textContent;
+  tag.textContent = '> COPIED';
+  tag.style.color = 'var(--ok)';
+  setTimeout(()=>{ tag.textContent = orig; tag.style.color=''; }, 900);
+});
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="components-px.js" data-presets="react"></script>
+</body>
+</html>

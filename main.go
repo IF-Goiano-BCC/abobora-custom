@@ -174,6 +174,7 @@ func main() {
 			}
 			return template.JS(b)
 		},
+		"add": func(a, b int) int { return a + b },
 	}
 	tmpl = template.New("").Funcs(funcMap)
 	tmpl = template.Must(tmpl.ParseGlob("templates/**.html"))
